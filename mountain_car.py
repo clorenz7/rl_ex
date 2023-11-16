@@ -86,38 +86,18 @@ class MountainCarAgent:
         ax.plot_surface(grid_x, grid_y, time_to_go); plt.show()
 
 
-class TiledLinearAgent(MountainCarAgent):
+class TorchAgentBase(MountainCarAgent):
 
-    def __init__(self, n_actions, n_grid=8, n_tiles=8,
+    def __init__(self, n_actions, gamma=1.0, epsilon=1e-8,
                  min_vals=MIN_VALS, max_vals=MAX_VALS,
                  alpha=0.1/8):
         super().__init__(
             n_actions, min_vals=min_vals, max_vals=max_vals,
-            gamma=1.0, epsilon=1e-8, alpha=alpha,
+            gamma=gamma, epsilon=epsilon, alpha=alpha,
         )
-        self.n_grid = n_grid
-        self.n_tiles = n_tiles
-
-        self.tiling = Tiles.generate(
-            n_tiles, [n_grid, n_grid],
-            min_vals, max_vals,
-            uniform=True
-        )
-        self.n_grid_entries = n_grid * n_grid
-        self.n_feats = n_grid * n_grid * n_tiles
-
-        self.reset()
 
     def state_to_features(self, state):
-        features = torch.zeros(self.n_feats)
-        for i in range(self.n_tiles):
-            index = self.tiling[i](state)
-            if index is None:
-                state = self.bound(state)
-                index = self.tiling[i](state)
-            features[i * self.n_grid_entries + index] = 1
-
-        return features
+        return state
 
     def step(self, reward, state, debug=False):
         weights = self.net.weight.clone().detach()
@@ -182,6 +162,40 @@ class TiledLinearAgent(MountainCarAgent):
         )
 
 
+class TiledLinearAgent(TorchAgentBase):
+
+    def __init__(self, n_actions, n_grid=8, n_tiles=8,
+                 min_vals=MIN_VALS, max_vals=MAX_VALS,
+                 alpha=0.1/8):
+        super().__init__(
+            n_actions, min_vals=min_vals, max_vals=max_vals,
+            gamma=1.0, epsilon=1e-8, alpha=alpha,
+        )
+        self.n_grid = n_grid
+        self.n_tiles = n_tiles
+
+        self.tiling = Tiles.generate(
+            n_tiles, [n_grid, n_grid],
+            min_vals, max_vals,
+            uniform=True
+        )
+        self.n_grid_entries = n_grid * n_grid
+        self.n_feats = n_grid * n_grid * n_tiles
+
+        self.reset()
+
+    def state_to_features(self, state):
+        features = torch.zeros(self.n_feats)
+        for i in range(self.n_tiles):
+            index = self.tiling[i](state)
+            if index is None:
+                state = self.bound(state)
+                index = self.tiling[i](state)
+            features[i * self.n_grid_entries + index] = 1
+
+        return features
+
+
 class TiledLinearAgentSutton(TiledLinearAgent):
     """
     Work in Progress class to use Sutton's tiling
@@ -212,6 +226,16 @@ class TiledLinearAgentSutton(TiledLinearAgent):
 
         return features
 
+
+class TorchAgent(MountainCarAgent):
+
+    def __init__(self, n_actions, n_hidden=8, n_layers=2,
+                 min_vals=MIN_VALS, max_vals=MAX_VALS,
+                 alpha=0.1/8):
+        super().__init__(
+            n_actions, min_vals=min_vals, max_vals=max_vals,
+            gamma=1.0, epsilon=1e-8, alpha=alpha,
+        )
 
 def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                     eval_episodes={}):
@@ -250,8 +274,6 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
 
     return run_steps
 
-class
-
 
 def main():
     env = gym.make('MountainCar-v0')
@@ -260,7 +282,10 @@ def main():
     run_steps = experiment_loop(env, agent, n_episodes=200, n_runs=20)
 
     avg_steps = np.mean(run_steps, axis=1)
-    plt.semilogy(avg_steps); plt.show()
+    plt.semilogy(avg_steps);
+    plt.xlabel('Episode #');
+    plt.ylabel('Avg # of Steps to Reach Goal');
+    plt.show()
 
     import ipdb; ipdb.set_trace()
 
