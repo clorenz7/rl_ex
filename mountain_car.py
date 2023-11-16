@@ -44,7 +44,7 @@ class MountainCarAgent:
             features = self.state_to_features(state)
 
         with torch.no_grad():
-            action_vals = self.layer(features)
+            action_vals = self.net(features)
             if random.random() >= self.epsilon:
                 action_idx = int(torch.argmax(action_vals))
             else:
@@ -79,7 +79,7 @@ class MountainCarAgent:
         features = torch.vstack(features)
 
         with torch.no_grad():
-            q_vals = self.layer(features)
+            q_vals = self.net(features)
         q_vals = q_vals.reshape([n_mesh, n_mesh, 3]).detach().numpy()
         time_to_go = -np.max(q_vals, axis=2)
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
@@ -120,19 +120,19 @@ class TiledLinearAgent(MountainCarAgent):
         return features
 
     def step(self, reward, state, debug=False):
-        weights = self.layer.weight.clone().detach()
+        weights = self.net.weight.clone().detach()
         features = self.state_to_features(state)
         next_action = self.select_action(features=features)
 
         with torch.no_grad():
-            next_value = self.layer(features)[next_action].item()
+            next_value = self.net(features)[next_action].item()
             if debug:
-                last_value = self.layer(self.last_features)[self.last_action]
+                last_value = self.net(self.last_features)[self.last_action]
 
         self.optimizer.zero_grad(set_to_none=True)
         delta = (
             reward + self.gamma * next_value
-            - self.layer(self.last_features)[self.last_action]
+            - self.net(self.last_features)[self.last_action]
         )
         loss = delta ** 2
         if debug:
@@ -143,11 +143,11 @@ class TiledLinearAgent(MountainCarAgent):
         if debug:
             # This is sanity checking.
             grad = self.last_features
-            actual_update = self.layer.weight.detach() - weights
+            actual_update = self.net.weight.detach() - weights
             exp_update = 2 * self.optimizer.param_groups[0]['lr'] * delta.clone().detach() * grad
 
             with torch.no_grad():
-                updated_value = self.layer(self.last_features)[self.last_action]
+                updated_value = self.net(self.last_features)[self.last_action]
 
             value_delta = updated_value - last_value
             weight_delta = torch.abs(actual_update[self.last_action, :] - exp_update).max()
@@ -163,26 +163,26 @@ class TiledLinearAgent(MountainCarAgent):
         last_features = self.state_to_features(self.last_state)
 
         loss = (
-            reward - self.layer(last_features)[self.last_action]
+            reward - self.net(last_features)[self.last_action]
         )
         loss.backward()
         self.optimizer.step()
 
     def reset(self):
-        self.layer = nn.Linear(
+        self.net = nn.Linear(
             self.n_feats, self.n_actions, bias=False
         )
-        self.layer.weight.data = self.layer.weight.data/1000
+        self.net.weight.data = self.net.weight.data/1000
 
         self.optimizer = torch.optim.SGD(
-            self.layer.parameters(),
+            self.net.parameters(),
             momentum=0.0,
             weight_decay=0.0,
             lr=self.alpha/2
         )
 
 
-class TiledLinearAgent2(TiledLinearAgent):
+class TiledLinearAgentSutton(TiledLinearAgent):
     """
     Work in Progress class to use Sutton's tiling
     """
@@ -249,6 +249,8 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
         agent.reset()
 
     return run_steps
+
+class
 
 
 def main():
