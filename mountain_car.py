@@ -304,11 +304,13 @@ class FFWAgent2(TorchAgentBase):
         self.n_layers = agent_params.get('n_layers', 3)
         self.n_state = 2
         min_vals = agent_params.get('min_vals', MIN_VALS)
-        max_vals = agent_params.get('max_vals', MIN_VALS)
+        max_vals = agent_params.get('max_vals', MAX_VALS)
 
         gamma = agent_params.get('gamma', 1.0)
         epsilon = agent_params.get('epsilon', 1e-2)
         alpha = agent_params.get('alpha', 1e-6)
+
+        self.dropout = agent_params.get('dropout', 0.0)
 
         self.train_params = train_params
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
@@ -332,6 +334,8 @@ class FFWAgent2(TorchAgentBase):
             layers.append(layer)
             if not is_last:
                 layers.append(nn.ReLU())
+                if self.dropout:
+                    layers.append(nn.Dropout(p=self.dropout))
             last_out = self.n_hidden
 
         self.net = nn.Sequential(
@@ -348,6 +352,7 @@ class FFWAgent2(TorchAgentBase):
                 self.net.parameters(),
                 **self.train_params
             )
+
 
 def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                     eval_episodes={}, max_steps=10000, verbose=True):
@@ -407,19 +412,22 @@ class ExperimentParams:
 
 def main():
 
-    # parser = argparse.ArgumentParser(
-    #     description="Train an RL Agent for Mountain Car"
-    # )
-    # parser.add_argument(
-    #     '-j', "--json", type=str, default="",
-    #     help="Json experiment parameters"
-    # )
+    parser = argparse.ArgumentParser(
+        description="Train an RL Agent for Mountain Car"
+    )
+    parser.add_argument(
+        '-j', "--json", type=str, default="",
+        help="Json experiment parameters"
+    )
 
-    # cli_args = parser.parse_args()
+    cli_args = parser.parse_args()
 
-    # with open(cli_args.json, 'r') as fp:
-    #     json_params = json.load(fp)
-    #     exp_params = ExperimentParams(**json_params)
+    if cli_args.json:
+        with open(cli_args.json, 'r') as fp:
+            json_params = json.load(fp)
+    else:
+        json_params = {}
+    exp_params = ExperimentParams(**json_params)
 
     env = gym.make('MountainCar-v0')
     n_actions = env.action_space.n
@@ -432,61 +440,20 @@ def main():
     # agent.evaluate_q()
     # run_steps = experiment_loop(env, agent, n_episodes=200, n_runs=20)
 
-    # This sorta worked with SGD (first took 7976 steps):
-    # agent = FFWAgent(
-    #     n_actions, alpha=1e-3, device=device, n_hidden=512, n_layers=4,
-    #     epsilon=0.1
-    # )
-    # This kinda works with Adam:
-    # agent = FFWAgent(
-    #     n_actions, alpha=1e-5, device=device, n_hidden=512, n_layers=4,
-    #     epsilon=0.05, optimizer="adam"
-    # )
-
-    # agent = FFWAgent(
-    #     n_actions, alpha=1e-3, device=device, n_hidden=1024, n_layers=4,
-    #     epsilon=0.05
-    # )
-
-    # epislon of 0.01 seems to be better than 0.05... at alpha of 1e-5
-    # lr of 6e-6 seeems to be best so far.
-    # agent = FFWAgent(
-    #     n_actions, alpha=6e-6, device=device, n_hidden=512, n_layers=4,
-    #     epsilon=1e-4, optimizer="adam"
-    # )
-    # This starts well and then degrades: (weight decay needed?)
-    # agent = FFWAgent(
-    #     n_actions, alpha=1e-5, device=device, n_hidden=512, n_layers=3,
-    #     epsilon=1e-4, optimizer="adam"
-    # )
-    # Weight decay sort of helps (1e-4 initially)
-    # agent = FFWAgent(
-    #     n_actions, alpha=1e-5, device=device, n_hidden=1024, n_layers=3,
-    #     epsilon=1e-4, optimizer="adam", weight_decay=1e-3
-    # )
-
-    # # This did quite a bit better
-    # agent = FFWAgent(
-    #     n_actions, alpha=2e-6, device=device, n_hidden=1024, n_layers=4,
-    #     epsilon=1e-4, optimizer="adam", weight_decay=1e-3
-    # )
-    # run_steps = experiment_loop(env, agent, n_episodes=100, n_runs=10, max_steps=15000)
-
-    # q_vals = agent.evaluate_q()
-    # This did not over train:
-    # agent = FFWAgent(
-    #     n_actions, alpha=5e-7, device=device, n_hidden=1024, n_layers=4,
+    agent = FFWAgent2(
+        n_actions,
+        exp_params.agent_params,
+        exp_params.train_params,
+        device=device
+    )
+    # agent_og = FFWAgent(
+    #     n_actions, alpha=5e-7, device=device, n_hidden=512, n_layers=4,
     #     epsilon=1e-3, optimizer="adam", weight_decay=1e-2
     # )
-    # run_steps = experiment_loop(env, agent, n_episodes=80, n_runs=10, max_steps=14000)
 
-    agent = FFWAgent(
-        n_actions, alpha=2e-6, device=device, n_hidden=1024, n_layers=4,
-        epsilon=1e-3, optimizer="adam", weight_decay=1e-2
+    run_steps = experiment_loop(
+        env, agent, **exp_params.simulation_params
     )
-    run_steps = experiment_loop(env, agent, n_episodes=250, n_runs=10, max_steps=14000)
-
-
 
     avg_steps = np.mean(run_steps, axis=1)
     plt.semilogy(avg_steps);

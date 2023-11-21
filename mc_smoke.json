@@ -1,0 +1,17 @@
+{
+    "agent_params": {
+        "n_hidden": 512,
+        "n_layers": 4,
+        "epsilon": 1e-3
+    },
+    "train_params": {
+        "optimizer": "adam",
+        "alpha": 5e-7,
+        "weight_decay": 1e-2
+    },
+    "simulation_params": {
+        "n_runs": 5,
+        "n_episodes": 50,
+        "max_steps": 14000
+    }
+}
