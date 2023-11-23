@@ -3,11 +3,15 @@ Mountain car
 - Initial version is tile coding with linear function approx.
 """
 import argparse
+from copy import deepcopy
+import datetime
 import json
+import pprint
 import random
 import time
 
 import gymnasium as gym
+import joblib
 import matplotlib.pyplot as plt
 from mushroom_rl.features.tiles import Tiles
 import numpy as np
@@ -92,7 +96,7 @@ class MountainCarAgent:
         return q_vals
 
 
-class TorchAgentBase(MountainCarAgent):
+class TorchQAgentBase(MountainCarAgent):
 
     def __init__(self, n_actions, gamma=1.0, epsilon=1e-8,
                  min_vals=MIN_VALS, max_vals=MAX_VALS,
@@ -164,21 +168,8 @@ class TorchAgentBase(MountainCarAgent):
         loss.backward()
         self.optimizer.step()
 
-    def reset(self):
-        self.net = nn.Linear(
-            self.n_feats, self.n_actions, bias=False
-        ).to(self.device)
-        self.net.weight.data = self.net.weight.data/1000
 
-        self.optimizer = torch.optim.SGD(
-            self.net.parameters(),
-            momentum=0.0,
-            weight_decay=0.0,
-            lr=self.alpha/2
-        )
-
-
-class TiledLinearAgent(TorchAgentBase):
+class TiledLinearQAgent(TorchQAgentBase):
 
     def __init__(self, n_actions, n_grid=8, n_tiles=8,
                  min_vals=MIN_VALS, max_vals=MAX_VALS,
@@ -211,8 +202,21 @@ class TiledLinearAgent(TorchAgentBase):
 
         return features
 
+    def reset(self):
+        self.net = nn.Linear(
+            self.n_feats, self.n_actions, bias=False
+        ).to(self.device)
+        self.net.weight.data = self.net.weight.data/1000
 
-class TiledLinearAgentSutton(TiledLinearAgent):
+        self.optimizer = torch.optim.SGD(
+            self.net.parameters(),
+            momentum=0.0,
+            weight_decay=0.0,
+            lr=self.alpha/2
+        )
+
+
+class TiledLinearQAgentSutton(TiledLinearQAgent):
     """
     Work in Progress class to use Sutton's tiling
     """
@@ -226,7 +230,6 @@ class TiledLinearAgentSutton(TiledLinearAgent):
         self.n_grid = n_grid
         self.n_tiles = n_tiles
         self.alpha = alpha
-
 
         self.iht = sutton_tiles.IHT(4096)
 
@@ -244,64 +247,19 @@ class TiledLinearAgentSutton(TiledLinearAgent):
         return features
 
 
-class FFWAgent(TorchAgentBase):
-
-    def __init__(self, n_actions, n_hidden=8, n_layers=2,
-                 min_vals=MIN_VALS, max_vals=MAX_VALS,
-                 alpha=0.1/8, epsilon=0.1, device="cpu",
-                 optimizer="adam", weight_decay=0, dropout=0):
-        self.n_hidden = n_hidden
-        self.n_layers = n_layers
-        self.n_state = 2
-        super().__init__(
-            n_actions, min_vals=min_vals, max_vals=max_vals,
-            gamma=1.0, epsilon=epsilon, alpha=alpha, device=device
-        )
-        self.optimizer_name = optimizer.lower()
-        self.weight_decay = weight_decay
-        self.dropout = dropout
-        self.reset()
-
-    def reset(self):
-        layers = []
-        last_out = self.n_state
-        for ii in range(self.n_layers):
-            is_last = ii == self.n_layers-1
-            next_out = self.n_actions if is_last else self.n_hidden
-            layer = nn.Linear(last_out, next_out, bias=True)
-            # layer.weight.data = layer.weight.data/10
-            layers.append(layer)
-            if not is_last:
-                layers.append(nn.ReLU())
-                if self.dropout:
-                    layers.append(nn.Dropout(p=self.dropout))
-                # layers.append(nn.Sigmoid())
-            last_out = self.n_hidden
-
-        self.net = nn.Sequential(
-            *layers
-        ).to(self.device).train()
-
-        if self.optimizer_name == "adam":
-            self.optimizer = torch.optim.Adam(
-                self.net.parameters(),
-                lr=self.alpha,
-                weight_decay=self.weight_decay
-            )
-        else:
-            self.optimizer = torch.optim.SGD(
-                self.net.parameters(),
-                momentum=0.0,
-                weight_decay=0.0,
-                lr=self.alpha
-            )
-
-
-class FFWAgent2(TorchAgentBase):
+class FFWQAgent(TorchQAgentBase):
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="cpu"):
-        self.n_hidden = agent_params.get('n_hidden', 512)
-        self.n_layers = agent_params.get('n_layers', 3)
+
+        n_hidden = agent_params.get('n_hidden', 512)
+
+        if isinstance(n_hidden, list):
+            self.n_hidden = n_hidden
+            self.n_layers = len(n_hidden) + 1
+        else:
+            self.n_layers = agent_params.get('n_layers', 3)
+            self.n_hidden = [n_hidden] * self.n_layers
+
         self.n_state = 2
         min_vals = agent_params.get('min_vals', MIN_VALS)
         max_vals = agent_params.get('max_vals', MAX_VALS)
@@ -328,15 +286,16 @@ class FFWAgent2(TorchAgentBase):
         layers = []
         last_out = self.n_state
         for ii in range(self.n_layers):
-            is_last = ii == self.n_layers-1
-            next_out = self.n_actions if is_last else self.n_hidden
-            layer = nn.Linear(last_out, next_out, bias=True)
-            layers.append(layer)
-            if not is_last:
+            is_not_last = ii != self.n_layers-1
+            next_out = self.n_hidden[ii] if is_not_last else self.n_actions
+            layers.append(
+                nn.Linear(last_out, next_out, bias=True)
+            )
+            if is_not_last:
                 layers.append(nn.ReLU())
                 if self.dropout:
                     layers.append(nn.Dropout(p=self.dropout))
-            last_out = self.n_hidden
+            last_out = next_out
 
         self.net = nn.Sequential(
             *layers
@@ -403,11 +362,35 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
 
 class ExperimentParams:
 
+    DEFAULT_SIM = {
+        'n_episodes': 80
+    }
+
     def __init__(self, agent_params={}, train_params={},
-                 simulation_params={}):
+                 simulation_params=None):
         self.agent_params = agent_params
         self.train_params = train_params
-        self.simulation_params = simulation_params
+        self.simulation_params = simulation_params or dict(self.DEFAULT_SIM)
+
+    def to_dict(self):
+        return dict(
+            agent_params=self.agent_params,
+            train_params=self.train_params,
+            simulation_params=self.simulation_params,
+        )
+
+
+def copy_and_update_params(exp_params, keys, vals):
+    params = dict(
+        agent_params=deepcopy(exp_params.agent_params),
+        train_params=deepcopy(exp_params.train_params)
+    )
+
+    for key, vals in zip(keys, vals):
+        start, param = key.split(".", 1)
+        params[start][param] = vals
+
+    return params['agent_params'], params['train_params']
 
 
 def main():
@@ -421,12 +404,16 @@ def main():
     )
 
     cli_args = parser.parse_args()
+    date_time = datetime.datetime.now().strftime('%Y_%b_%d_%H_%M')
 
     if cli_args.json:
         with open(cli_args.json, 'r') as fp:
             json_params = json.load(fp)
     else:
         json_params = {}
+    pprint.pprint(json_params)
+
+    param_study = json_params.pop('param_study', {})
     exp_params = ExperimentParams(**json_params)
 
     env = gym.make('MountainCar-v0')
@@ -436,31 +423,61 @@ def main():
     else:
         device = "cpu"
 
-    # agent = TiledLinearAgent(n_actions, alpha=0.5/8)
-    # agent.evaluate_q()
-    # run_steps = experiment_loop(env, agent, n_episodes=200, n_runs=20)
+    if param_study:
+        param_keys = [k for k in param_study.keys()]
+        n_vals = [len(v) for v in param_study.values()]
+        # Limit to first two dimensions for now
+        param_keys = param_keys[:2]
+        n_vals = n_vals[:2]
 
-    agent = FFWAgent2(
-        n_actions,
-        exp_params.agent_params,
-        exp_params.train_params,
-        device=device
-    )
-    # agent_og = FFWAgent(
-    #     n_actions, alpha=5e-7, device=device, n_hidden=512, n_layers=4,
-    #     epsilon=1e-3, optimizer="adam", weight_decay=1e-2
-    # )
+        n_episodes = exp_params.simulation_params['n_episodes']
+        metric_shape = (n_vals[0], n_vals[1], n_episodes)
+        metric = np.zeros(metric_shape)
 
-    run_steps = experiment_loop(
-        env, agent, **exp_params.simulation_params
-    )
+        for i in range(n_vals[0]):
+            val_i = param_study[param_keys[0]][i]
+            for j in range(n_vals[1]):
+                val_j = param_study[param_keys[1]][j]
+                print(f"Testing {param_keys[0]}:{val_i} and {param_keys[1]}:{val_j}")
+                agent_params, train_params = copy_and_update_params(
+                    exp_params, param_keys, [val_i, val_j]
+                )
+                agent = FFWQAgent(
+                    n_actions, agent_params, train_params, device=device
+                )
+                run_steps = experiment_loop(
+                    env, agent, **exp_params.simulation_params
+                )
+                avg_steps = np.mean(run_steps, axis=1)
+                metric[i, j, :] = avg_steps
 
-    avg_steps = np.mean(run_steps, axis=1)
-    plt.semilogy(avg_steps);
-    plt.xlabel('Episode #');
-    plt.ylim(bottom=100);
-    plt.ylabel('Avg # of Steps to Reach Goal');
-    plt.show()
+        param_vals = [v for v in param_study.values()]
+        joblib.dump({
+            "metric": metric,
+            "keys": param_keys,
+            "values": param_vals,
+            "exp_params": exp_params.to_dict(),
+        }, f"param_study_{date_time}.joblib")
+
+    else:
+        # Just a single evaluation
+        agent = FFWQAgent(
+            n_actions,
+            exp_params.agent_params,
+            exp_params.train_params,
+            device=device
+        )
+
+        run_steps = experiment_loop(
+            env, agent, **exp_params.simulation_params
+        )
+
+        avg_steps = np.mean(run_steps, axis=1)
+        plt.semilogy(avg_steps);
+        plt.xlabel('Episode #');
+        plt.ylim(bottom=100);
+        plt.ylabel('Avg # of Steps to Reach Goal');
+        plt.show()
 
     import ipdb; ipdb.set_trace()
 
