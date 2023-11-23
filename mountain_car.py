@@ -314,10 +314,14 @@ class FFWQAgent(TorchQAgentBase):
 
 
 def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
-                    eval_episodes={}, max_steps=10000, verbose=True):
+                    eval_episodes={}, max_steps=[10000, 10000], verbose=True):
 
-    # actions = list(range(env.action_space.n))
     run_steps = np.zeros((n_episodes, n_runs))
+
+    if isinstance(max_steps, int):
+        max_steps = [max_steps]*2
+
+    step_limit = np.linspace(max_steps[0], max_steps[1], n_episodes)
 
     state, info = env.reset(seed=seed)
     for r_idx in range(n_runs):
@@ -336,7 +340,8 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                 actions.append(action_idx)
 
                 # Pause if loop might be infinite
-                if s_idx > max_steps:
+                if s_idx >= step_limit[e_idx]:
+                    final_state = "aborted"
                     elap = round((time.time() - st)/60, 2)
                     # print(f"Break at {s_idx} after {elap}min")
                     # agent.evaluate_q()
@@ -344,13 +349,14 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                     # import ipdb; ipdb.set_trace()
                     break
             if terminated:
+                final_state = "reached goal"
                 agent.finish(reward)
             elap = round((time.time() - st)/60, 2)
             # agent.evaluate_q()
             # Record result and display if desired
             run_steps[e_idx, r_idx] = s_idx
             if verbose or (e_idx + 1) % 100 == 0:
-                print(f"Run {r_idx+1} Episode {e_idx+1} terminated at step {s_idx} in {elap}min")
+                print(f"Run {r_idx+1} Episode {e_idx+1} {final_state} at step {s_idx} in {elap}min")
             if e_idx in eval_episodes:
                 q_vals = agent.evaluate_q()
 
@@ -379,18 +385,17 @@ class ExperimentParams:
             simulation_params=self.simulation_params,
         )
 
+    def copy_and_update_params(self, keys, vals):
+        params = dict(
+            agent_params=deepcopy(self.agent_params),
+            train_params=deepcopy(self.train_params)
+        )
 
-def copy_and_update_params(exp_params, keys, vals):
-    params = dict(
-        agent_params=deepcopy(exp_params.agent_params),
-        train_params=deepcopy(exp_params.train_params)
-    )
+        for key, vals in zip(keys, vals):
+            start, param = key.split(".", 1)
+            params[start][param] = vals
 
-    for key, vals in zip(keys, vals):
-        start, param = key.split(".", 1)
-        params[start][param] = vals
-
-    return params['agent_params'], params['train_params']
+        return params['agent_params'], params['train_params']
 
 
 def main():
@@ -439,8 +444,8 @@ def main():
             for j in range(n_vals[1]):
                 val_j = param_study[param_keys[1]][j]
                 print(f"Testing {param_keys[0]}:{val_i} and {param_keys[1]}:{val_j}")
-                agent_params, train_params = copy_and_update_params(
-                    exp_params, param_keys, [val_i, val_j]
+                agent_params, train_params = exp_params.copy_and_update_params(
+                    param_keys, [val_i, val_j]
                 )
                 agent = FFWQAgent(
                     n_actions, agent_params, train_params, device=device
