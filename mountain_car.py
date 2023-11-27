@@ -425,6 +425,8 @@ def main():
     n_actions = env.action_space.n
     if torch.backends.mps.is_available():
         device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
     else:
         device = "cpu"
 
