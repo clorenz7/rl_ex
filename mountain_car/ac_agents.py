@@ -119,7 +119,8 @@ class MountainCarActorCriticAgent:
 
         # with torch.no_grad():
         #     next_action, value_est = self.get_action_and_value(features=features)
-        value_est = self.critic(features)
+        with torch.no_grad():
+            value_est = self.critic(features)
 
         total_return_est = reward + self.gamma * value_est.item()
 
@@ -138,6 +139,7 @@ class MountainCarActorCriticAgent:
         # import ipdb; ipdb.set_trace()
         # next_action, value_est = self.get_action_and_value(features=features)
         next_action = self.select_action(features=features)
+        value_est = self.critic(features)
 
         # if debug:
         #     # This is sanity checking.
@@ -173,9 +175,10 @@ class MountainCarActorCriticAgent:
         self.optimizer.step()
 
     def reset(self):
-        self.net = Policy(
-            self.n_actions, self.n_hidden, self.n_state
-        ).to(self.device)
+        # self.net = Policy(
+        #     self.n_actions, self.n_hidden, self.n_state
+        # ).to(self.device)
+        # params = self.net.parameters()
 
         self.actor = nn.Sequential(
             nn.Linear(self.n_state, self.n_hidden),
@@ -188,15 +191,16 @@ class MountainCarActorCriticAgent:
             nn.ReLU(),
             nn.Linear(self.n_hidden, 1),
         ).to(self.device)
+        params = list(self.actor.parameters()) + list(self.critic.parameters())
 
 
         if self.optimizer_name == "adam":
             self.optimizer = torch.optim.AdamW(
-                self.net.parameters(),
+                params,
                 **self.train_params
             )
         else:
             self.optimizer = torch.optim.SGD(
-                self.net.parameters(),
+                params,
                 **self.train_params
             )
