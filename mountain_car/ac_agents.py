@@ -190,7 +190,6 @@ class MountainCarActorCriticAgent:
         return self.last_action
 
     def finish(self, reward):
-        # self.optimizer.zero_grad(set_to_none=True)
         last_log_prob = self.last_log_prob
         prev_value_est = self.last_value_est
         # Semi-gradient update
@@ -214,22 +213,16 @@ class MountainCarActorCriticAgent:
             self.optimizer.step()
 
     def reset(self):
-        # self.net = Policy(
-        #     self.n_actions, self.n_hidden, self.n_state
-        # ).to(self.device)
-        # params = self.net.parameters()
 
         if self.n_hidden is not None:
             self.actor = nn.Sequential(
                 nn.Linear(self.n_state, self.n_hidden),
-                # nn.ReLU(),
                 nn.ELU(),
                 nn.Linear(self.n_hidden, self.n_actions),
                 nn.Softmax(dim=-1)
             ).to(self.device)
             self.critic = nn.Sequential(
                 nn.Linear(self.n_state, self.n_hidden),
-                # nn.ReLU(),
                 nn.ELU(),
                 nn.Linear(self.n_hidden, 1),
             ).to(self.device)
@@ -251,11 +244,11 @@ class MountainCarActorCriticAgent:
             self.actor = net_from_layer_sizes(
                 actor_layer_sizes,
                 final_activation=partial(nn.Softmax, dim=-1)
-            )
+            ).to(self.device)
             critic_layer_sizes = [self.n_state] + self.critic_layers + [1]
             self.critic = net_from_layer_sizes(
                 critic_layer_sizes,
-            )
+            ).to(self.device)
             self.optimizer = None
             self.actor_optimizer = torch.optim.AdamW(
                 self.actor.parameters(),

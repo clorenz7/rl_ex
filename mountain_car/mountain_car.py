@@ -109,6 +109,24 @@ class ExperimentParams:
         return params['agent_params'], params['train_params']
 
 
+class AgentFactory:
+    _AGENTS = {
+        'deepq': q_agents.FFWQAgent,
+        'actor-critic': ac_agents.MountainCarActorCriticAgent,
+    }
+
+    def __init__(self, agent_type, n_actions, device="cpu"):
+        self.agent_type = agent_type.lower()
+        self.n_actions = n_actions
+        self.device = device
+
+    def get(self, agent_params, train_params):
+        constructor = self._AGENTS[self.agent_type]
+        return constructor(
+            self.n_actions, agent_params, train_params, device=self.device
+        )
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -122,7 +140,10 @@ def main():
         '-r', "--render", action="store_true",
         help="Render the agent in the environment"
     )
-
+    parser.add_argument(
+        '-g', "--no_gpu", action="store_true",
+        help="Turn off GPU acceleration"
+    )
 
     cli_args = parser.parse_args()
     date_time = datetime.datetime.now().strftime('%Y_%b_%d_%H_%M')
@@ -132,7 +153,13 @@ def main():
             json_params = json.load(fp)
     else:
         json_params = {}
+    default_agent_type = "actor-critic" if "ac" in cli_args.json else "deepq"
     pprint.pprint(json_params)
+
+    agent_type = json_params.pop("agent_type", None)
+    if agent_type is None:
+        print(f"WARNING! Agent Type no specified, using {default_agent_type}")
+        agent_type = default_agent_type
 
     param_study = json_params.pop('param_study', {})
     exp_params = ExperimentParams(**json_params)
@@ -140,15 +167,15 @@ def main():
     render_mode = "human" if cli_args.render else None
     env = gym.make('MountainCar-v0', render_mode=render_mode)
     n_actions = env.action_space.n
-    if False and torch.backends.mps.is_available():
-        device = torch.device("mps")
-    elif torch.cuda.is_available():
-        device = torch.device("cuda")
-    else:
-        device = "cpu"
 
-    # constructor = q_agents.FFWQAgent
-    constructor = ac_agents.MountainCarActorCriticAgent
+    device = torch.device("cpu")
+    if not cli_args.no_gpu:
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            device = torch.device("cuda")
+
+    factory = AgentFactory(agent_type, n_actions, device=device)
 
     if param_study:
         param_keys = [k for k in param_study.keys()]
@@ -171,11 +198,11 @@ def main():
                 agent_params, train_params = exp_params.copy_and_update_params(
                     param_keys, [val_i, val_j]
                 )
-                agent = constructor(
-                    n_actions, agent_params, train_params, device=device
-                )
+
+                agent = factory.get(agent_params, train_params)
                 run_steps = experiment_loop(
-                    env, agent, render=render_mode, **exp_params.simulation_params
+                    env, agent, render=render_mode,
+                    **exp_params.simulation_params
                 )
                 avg_steps = np.mean(run_steps, axis=1)
                 metric[i, j, :] = avg_steps
@@ -192,16 +219,13 @@ def main():
         # idx= 0; plt.semilogy(np.arange(0, 60), metric[ :, idx, :].T); plt.legend(param_vals[0]); plt.title(f'Weight Decay {param_vals[1][idx]:0.1e}'); plt.ylim(bottom=100); plt.show()
     else:
         # Just a single evaluation
-        # agent = q_agents.FFWQAgent(
-        agent = constructor(
-            n_actions,
+        agent = factory.get(
             exp_params.agent_params,
             exp_params.train_params,
-            device=device
         )
-
         run_steps = experiment_loop(
-            env, agent, render=render_mode, **exp_params.simulation_params
+            env, agent, render=render_mode,
+            **exp_params.simulation_params
         )
 
         avg_steps = np.mean(run_steps, axis=1)
