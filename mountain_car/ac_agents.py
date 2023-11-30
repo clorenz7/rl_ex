@@ -39,7 +39,7 @@ class MountainCarActorCriticAgent:
         self.last_action = None
 
         self.device = device
-        self.gamma = agent_params.get('gamma', 1.0)
+        self.gamma = agent_params.get('gamma', 0.9)
         self.n_actions = n_actions
         self.min_vals = MIN_VALS
         self.max_vals = MAX_VALS
@@ -54,8 +54,6 @@ class MountainCarActorCriticAgent:
         if alpha is not None:
             self.train_params['lr'] = alpha
 
-        torch.autograd.set_detect_anomaly(True)
-
         self.reset()
 
     def bound(self, state, eps=1e-4):
@@ -69,7 +67,7 @@ class MountainCarActorCriticAgent:
     # def state_to_features(self, state):
     #     return torch.from_numpy(state).float().to(self.device)
 
-    def select_action(self, state=None, features=None):
+    def get_action_and_value(self, state=None, features=None):
         if state is not None:
             features = self.state_to_features(state)
 
@@ -81,14 +79,26 @@ class MountainCarActorCriticAgent:
 
         return action.item(), value_est
 
+    def select_action(self, state=None, features=None):
+        if state is not None:
+            features = self.state_to_features(state)
+
+        action_probs = self.actor(features)
+
+        pdf = Categorical(action_probs)
+        action = pdf.sample()
+        self.last_log_prob = pdf.log_prob(action)
+
+        return action.item()
 
     def initialize(self, state):
         self.last_state = state
         self.last_features = self.state_to_features(state)
-        self.last_action, value_est = self.select_action(features=self.last_features)
+        # self.last_action, value_est = self.get_action_and_value(features=self.last_features)
+        self.last_action = self.select_action(features=self.last_features)
+        value_est = self.critic(self.last_features)
         self.last_value_est = value_est
         return self.last_action
-
 
     def state_to_features(self, state):
         features = (
@@ -99,15 +109,17 @@ class MountainCarActorCriticAgent:
 
     def step(self, reward, state, debug=False):
         self.optimizer.zero_grad(set_to_none=True)
-        # if self.manual_check:
-        #     weights = self.net[0].weight.clone().detach()
+        if debug:
+            weights = self.net.base_layer[0].weight.clone().detach()
+
         features = self.state_to_features(state)
 
         last_log_prob = self.last_log_prob
         prev_value_est = self.last_value_est
 
-        with torch.no_grad():
-            next_action, value_est = self.select_action(features=features)
+        # with torch.no_grad():
+        #     next_action, value_est = self.get_action_and_value(features=features)
+        value_est = self.critic(features)
 
         total_return_est = reward + self.gamma * value_est.item()
 
@@ -124,7 +136,8 @@ class MountainCarActorCriticAgent:
         self.optimizer.step()
 
         # import ipdb; ipdb.set_trace()
-        next_action, value_est = self.select_action(features=features)
+        # next_action, value_est = self.get_action_and_value(features=features)
+        next_action = self.select_action(features=features)
 
         # if debug:
         #     # This is sanity checking.
@@ -163,6 +176,19 @@ class MountainCarActorCriticAgent:
         self.net = Policy(
             self.n_actions, self.n_hidden, self.n_state
         ).to(self.device)
+
+        self.actor = nn.Sequential(
+            nn.Linear(self.n_state, self.n_hidden),
+            nn.ReLU(),
+            nn.Linear(self.n_hidden, self.n_actions),
+            nn.Softmax(dim=-1)
+        ).to(self.device)
+        self.critic = nn.Sequential(
+            nn.Linear(self.n_state, self.n_hidden),
+            nn.ReLU(),
+            nn.Linear(self.n_hidden, 1),
+        ).to(self.device)
+
 
         if self.optimizer_name == "adam":
             self.optimizer = torch.optim.AdamW(

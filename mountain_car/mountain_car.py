@@ -20,7 +20,8 @@ import ac_agents
 
 
 def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
-                    eval_episodes={}, max_steps=[10000, 10000], verbose=True):
+                    eval_episodes={}, max_steps=[10000, 10000], verbose=True,
+                    render=False):
 
     run_steps = np.zeros((n_episodes, n_runs))
 
@@ -41,6 +42,8 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
             while not terminated:
                 action_idx = agent.step(reward, state)
                 state, reward, terminated, _, _ = env.step(action_idx)
+                if render:
+                    env.render()
                 trajectory.append(state)
                 s_idx += 1
                 actions.append(action_idx)
@@ -127,9 +130,9 @@ def main():
     param_study = json_params.pop('param_study', {})
     exp_params = ExperimentParams(**json_params)
 
-    env = gym.make('MountainCar-v0')
+    env = gym.make('MountainCar-v0', render_mode=None)  # "human")
     n_actions = env.action_space.n
-    if torch.backends.mps.is_available():
+    if False and torch.backends.mps.is_available():
         device = torch.device("mps")
     elif torch.cuda.is_available():
         device = torch.device("cuda")
