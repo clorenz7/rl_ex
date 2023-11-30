@@ -49,7 +49,8 @@ class MountainCarAgent:
     def initialize(self, state):
         self.last_state = state
         self.last_features = self.state_to_features(state)
-        self.last_action = self.select_action(state)
+        # self.last_action = self.select_action(state)
+        self.last_action = self.select_action(features=self.last_features)
         return self.last_action
 
     def evaluate_q(self, show_v=True):

@@ -16,6 +16,7 @@ import numpy as np
 import torch
 
 import q_agents
+import ac_agents
 
 
 def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
@@ -173,7 +174,8 @@ def main():
 
     else:
         # Just a single evaluation
-        agent = q_agents.FFWQAgent(
+        # agent = q_agents.FFWQAgent(
+        agent = ac_agents.MountainCarActorCriticAgent(
             n_actions,
             exp_params.agent_params,
             exp_params.train_params,
