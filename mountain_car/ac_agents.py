@@ -38,6 +38,8 @@ class MountainCarActorCriticAgent:
         self.last_state = None
         self.last_action = None
 
+        self.single_grad = agent_params.get("single_grad", True)
+
         self.device = device
         self.gamma = agent_params.get('gamma', 0.9)
         self.n_actions = n_actions
@@ -117,17 +119,18 @@ class MountainCarActorCriticAgent:
         last_log_prob = self.last_log_prob
         prev_value_est = self.last_value_est
 
-        # with torch.no_grad():
-        #     next_action, value_est = self.get_action_and_value(features=features)
-        with torch.no_grad():
+        if self.single_grad:
+            with torch.no_grad():
+                value_est = self.critic(features)
+            total_return_est = reward + self.gamma * value_est
+        else:
             value_est = self.critic(features)
-
-        total_return_est = reward + self.gamma * value_est.item()
+            total_return_est = reward + self.gamma * value_est
 
         delta = total_return_est - prev_value_est
 
         policy_loss = delta * -last_log_prob
-        value_loss = F.smooth_l1_loss(torch.tensor([total_return_est], device=self.device), prev_value_est)
+        value_loss = F.smooth_l1_loss(total_return_est, prev_value_est)
         loss = policy_loss + value_loss
 
         self.optimizer.zero_grad(set_to_none=True)
@@ -136,8 +139,6 @@ class MountainCarActorCriticAgent:
         loss.backward()
         self.optimizer.step()
 
-        # import ipdb; ipdb.set_trace()
-        # next_action, value_est = self.get_action_and_value(features=features)
         next_action = self.select_action(features=features)
         value_est = self.critic(features)
 
