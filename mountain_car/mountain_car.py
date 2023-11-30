@@ -43,7 +43,8 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                 action_idx = agent.step(reward, state)
                 state, reward, terminated, _, _ = env.step(action_idx)
                 if render:
-                    env.render()
+                    if (s_idx+1) % 500 == 0:
+                        print(f"Episode {e_idx} Step {s_idx+1}")
                 trajectory.append(state)
                 s_idx += 1
                 actions.append(action_idx)
@@ -78,7 +79,8 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
 class ExperimentParams:
 
     DEFAULT_SIM = {
-        'n_episodes': 80
+        'n_episodes': 80,
+        "n_runs": 8
     }
 
     def __init__(self, agent_params={}, train_params={},
@@ -116,6 +118,11 @@ def main():
         '-j', "--json", type=str, default="",
         help="Json experiment parameters"
     )
+    parser.add_argument(
+        '-r', "--render", action="store_true",
+        help="Render the agent in the environment"
+    )
+
 
     cli_args = parser.parse_args()
     date_time = datetime.datetime.now().strftime('%Y_%b_%d_%H_%M')
@@ -130,7 +137,8 @@ def main():
     param_study = json_params.pop('param_study', {})
     exp_params = ExperimentParams(**json_params)
 
-    env = gym.make('MountainCar-v0', render_mode=None)  # "human")
+    render_mode = "human" if cli_args.render else None
+    env = gym.make('MountainCar-v0', render_mode=render_mode)
     n_actions = env.action_space.n
     if False and torch.backends.mps.is_available():
         device = torch.device("mps")
@@ -138,6 +146,9 @@ def main():
         device = torch.device("cuda")
     else:
         device = "cpu"
+
+    # constructor = q_agents.FFWQAgent
+    constructor = ac_agents.MountainCarActorCriticAgent
 
     if param_study:
         param_keys = [k for k in param_study.keys()]
@@ -147,7 +158,9 @@ def main():
         n_vals = n_vals[:2]
 
         n_episodes = exp_params.simulation_params['n_episodes']
+        n_runs = exp_params.simulation_params['n_runs']
         metric_shape = (n_vals[0], n_vals[1], n_episodes)
+        all_episodes = np.zeros((n_vals[0], n_vals[1], n_episodes, n_runs))
         metric = np.zeros(metric_shape)
 
         for i in range(n_vals[0]):
@@ -158,27 +171,29 @@ def main():
                 agent_params, train_params = exp_params.copy_and_update_params(
                     param_keys, [val_i, val_j]
                 )
-                agent = q_agents.FFWQAgent(
+                agent = constructor(
                     n_actions, agent_params, train_params, device=device
                 )
                 run_steps = experiment_loop(
-                    env, agent, **exp_params.simulation_params
+                    env, agent, render=render_mode, **exp_params.simulation_params
                 )
                 avg_steps = np.mean(run_steps, axis=1)
                 metric[i, j, :] = avg_steps
+                all_episodes[i, j, :, :] = run_steps
 
         param_vals = [v for v in param_study.values()]
         joblib.dump({
+            "all_episodes": all_episodes,
             "metric": metric,
             "keys": param_keys,
             "values": param_vals,
             "exp_params": exp_params.to_dict(),
         }, f"param_study_{date_time}.joblib")
-
+        # idx= 0; plt.semilogy(np.arange(0, 60), metric[ :, idx, :].T); plt.legend(param_vals[0]); plt.title(f'Weight Decay {param_vals[1][idx]:0.1e}'); plt.ylim(bottom=100); plt.show()
     else:
         # Just a single evaluation
         # agent = q_agents.FFWQAgent(
-        agent = ac_agents.MountainCarActorCriticAgent(
+        agent = constructor(
             n_actions,
             exp_params.agent_params,
             exp_params.train_params,
@@ -186,7 +201,7 @@ def main():
         )
 
         run_steps = experiment_loop(
-            env, agent, **exp_params.simulation_params
+            env, agent, render=render_mode, **exp_params.simulation_params
         )
 
         avg_steps = np.mean(run_steps, axis=1)
