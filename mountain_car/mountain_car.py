@@ -12,6 +12,7 @@ import time
 import gymnasium as gym
 import joblib
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter;
 import numpy as np
 import torch
 
@@ -112,6 +113,7 @@ class ExperimentParams:
 class AgentFactory:
     _AGENTS = {
         'deepq': q_agents.FFWQAgent,
+        'qtiles': q_agents.TiledLinearQAgent,
         'actor-critic': ac_agents.MountainCarActorCriticAgent,
     }
 
@@ -171,8 +173,10 @@ def main():
     device = torch.device("cpu")
     if not cli_args.no_gpu:
         if torch.backends.mps.is_available():
+            print("Accelerating with MPS!")
             device = torch.device("mps")
         elif torch.cuda.is_available():
+            print("Accelerating with CUDA!")
             device = torch.device("cuda")
 
     factory = AgentFactory(agent_type, n_actions, device=device)
@@ -229,7 +233,12 @@ def main():
         )
 
         avg_steps = np.mean(run_steps, axis=1)
+
         plt.semilogy(avg_steps);
+        ax = plt.gca();
+        ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
+        ax.yaxis.set_major_formatter(FormatStrFormatter("%d"));
+        plt.grid(which="both");
         plt.xlabel('Episode #');
         plt.ylim(bottom=100);
         plt.ylabel('Avg # of Steps to Reach Goal');
