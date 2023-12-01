@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from mushroom_rl.features.tiles import Tiles
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 import sutton_tiles
 
@@ -55,20 +56,31 @@ class TorchQAgentBase:
         if state is not None:
             features = self.state_to_features(state)
 
-        with torch.no_grad():
-            action_vals = self.net(features)
-            action_idx = int(torch.argmax(action_vals))
-            max_val = action_vals[action_idx].item()
-            if random.random() < self.epsilon:
-                action_idx = random.randint(0, self.n_actions-1)
+        # with torch.no_grad():
+        #     action_vals = self.net(features)
+        #     action_idx = int(torch.argmax(action_vals))
+        #     # max_val = action_vals[action_idx].item()
+        #     if random.random() < self.epsilon:
+        #         action_idx = random.randint(0, self.n_actions-1)
+        #     action_value = action_vals[action_idx]
+        # # return action_idx, max_val
 
-        return action_idx, max_val
+        action_vals = self.net(features)
+        action_idx = int(torch.argmax(action_vals))
+        if random.random() < self.epsilon:
+            action_idx = random.randint(0, self.n_actions-1)
+        action_value = action_vals[action_idx]
+
+        return action_idx, action_value
 
     def initialize(self, state):
+        self.optimizer.zero_grad(set_to_none=True)
         self.last_state = state
         features = self.state_to_features(state)
-        self.last_action, _ = self.select_action(features=features)
+        self.last_action, action_value = self.select_action(features=features)
         self.last_features = features
+        self.last_action_value = action_value
+
         return self.last_action
 
     def evaluate_q(self, show_v=True):
@@ -112,26 +124,36 @@ class TorchQAgentBase:
         if debug:
             weights = self.net[0].weight.clone().detach()
         features = self.state_to_features(state)
-        next_action, max_q_val = self.select_action(features=features)
+        # next_action, next_state_value = self.select_action(features=features)
 
         with torch.no_grad():
             self.net.eval()
             # next_value = torch.max(self.net(features))[next_action].item()
-            # next_value = torch.max(self.net(features)).item()
+            # next_state_value = self.net(features).max().item()
+            next_state_value = self.net(features).max()
             if debug:
                 last_value = self.net(self.last_features)[self.last_action]
             self.net.train()
 
-        self.optimizer.zero_grad(set_to_none=True)
-        delta = (
-            (reward + self.gamma * max_q_val) -
-            self.net(self.last_features)[self.last_action]
-        )
-        loss = delta ** 2
+        if True:
+            delta = (
+                (reward + self.gamma * next_state_value) -
+                # self.net(self.last_features)[self.last_action]
+                self.last_action_value
+            )
+            loss = delta ** 2
+        else:
+            loss = F.smooth_l1_loss(
+                reward + self.gamma * next_state_value,
+                self.last_action_value
+            )
         if debug:
             loss.retain_grad()
         loss.backward()
         self.optimizer.step()
+        self.optimizer.zero_grad(set_to_none=True)
+
+        next_action, next_action_value = self.select_action(features=features)
 
         if debug:
             # This is sanity checking.
@@ -148,19 +170,29 @@ class TorchQAgentBase:
         self.last_state = state
         self.last_features = features
         self.last_action = next_action
+        self.last_action_value = next_action_value
 
         return self.last_action
 
     def finish(self, reward):
-        self.optimizer.zero_grad(set_to_none=True)
-        last_features = self.state_to_features(self.last_state)
+        # self.optimizer.zero_grad(set_to_none=True)
+        # last_features = self.state_to_features(self.last_state)
 
         # loss = (
         #     reward - self.net(last_features)[self.last_action]
         # )
-        loss = (reward - self.net(last_features).max())**2
+        # loss = (reward - self.net(last_features).max())**2
+        if True:
+            loss = (reward - self.last_action_value)**2
+        else:
+            loss = F.smooth_l1_loss(
+                torch.tensor([reward]),
+                self.last_action_value
+            )
         loss.backward()
+
         self.optimizer.step()
+        self.optimizer.zero_grad(set_to_none=True)
 
 
 class TiledLinearQAgent(TorchQAgentBase):
@@ -259,7 +291,8 @@ class FFWQAgent(TorchQAgentBase):
                 nn.Linear(last_out, next_out, bias=True)
             )
             if is_not_last:
-                layers.append(nn.ReLU())
+                # layers.append(nn.ReLU())
+                layers.append(nn.ELU())
             last_out = next_out
 
         self.net = nn.Sequential(
