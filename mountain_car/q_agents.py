@@ -115,7 +115,8 @@ class TorchQAgentBase:
 
         with torch.no_grad():
             self.net.eval()
-            next_value = self.net(features)[next_action].item()
+            # next_value = torch.max(self.net(features))[next_action].item()
+            next_value = torch.max(self.net(features)).item()
             if debug:
                 last_value = self.net(self.last_features)[self.last_action]
             self.net.train()
