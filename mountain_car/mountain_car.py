@@ -21,6 +21,9 @@ import q_agents
 import ac_agents
 
 
+DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "rl_results")
+
+
 def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                     eval_episodes={}, max_steps=[10000, 10000], verbose=True,
                     render=False):
@@ -165,7 +168,7 @@ def main():
         help="Turn off GPU acceleration"
     )
     parser.add_argument(
-        '-o', '--out_dir', default=os.path.expanduser("~"),
+        '-o', '--out_dir', default=DEFAULT_DIR,
         help="Where to store results"
     )
 

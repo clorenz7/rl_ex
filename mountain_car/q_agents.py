@@ -57,17 +57,18 @@ class TorchQAgentBase:
 
         with torch.no_grad():
             action_vals = self.net(features)
-            if random.random() >= self.epsilon:
-                action_idx = int(torch.argmax(action_vals))
-            else:
+            action_idx = int(torch.argmax(action_vals))
+            max_val = action_vals[action_idx].item()
+            if random.random() < self.epsilon:
                 action_idx = random.randint(0, self.n_actions-1)
 
-        return action_idx
+        return action_idx, max_val
 
     def initialize(self, state):
         self.last_state = state
-        self.last_features = self.state_to_features(state)
-        self.last_action = self.select_action(features=self.last_features)
+        features = self.state_to_features(state)
+        self.last_action, _ = self.select_action(features=features)
+        self.last_features = features
         return self.last_action
 
     def evaluate_q(self, show_v=True):
@@ -111,20 +112,20 @@ class TorchQAgentBase:
         if debug:
             weights = self.net[0].weight.clone().detach()
         features = self.state_to_features(state)
-        next_action = self.select_action(features=features)
+        next_action, max_q_val = self.select_action(features=features)
 
         with torch.no_grad():
             self.net.eval()
             # next_value = torch.max(self.net(features))[next_action].item()
-            next_value = torch.max(self.net(features)).item()
+            # next_value = torch.max(self.net(features)).item()
             if debug:
                 last_value = self.net(self.last_features)[self.last_action]
             self.net.train()
 
         self.optimizer.zero_grad(set_to_none=True)
         delta = (
-            reward + self.gamma * next_value
-            - self.net(self.last_features)[self.last_action]
+            (reward + self.gamma * max_q_val) -
+            self.net(self.last_features)[self.last_action]
         )
         loss = delta ** 2
         if debug:
@@ -154,9 +155,10 @@ class TorchQAgentBase:
         self.optimizer.zero_grad(set_to_none=True)
         last_features = self.state_to_features(self.last_state)
 
-        loss = (
-            reward - self.net(last_features)[self.last_action]
-        )
+        # loss = (
+        #     reward - self.net(last_features)[self.last_action]
+        # )
+        loss = (reward - self.net(last_features).max())**2
         loss.backward()
         self.optimizer.step()
 
