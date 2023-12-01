@@ -14,18 +14,8 @@ MAX_VALS = [0.6, 0.07]
 
 class TorchQAgentBase:
 
-    # def __init__(self, n_actions, min_vals=MIN_VALS, max_vals=MAX_VALS,
-    #              gamma=1.0, epsilon=1e-8, alpha=None):
-    #     self.last_state = None
-    #     self.last_action = None
-    #     self.gamma = gamma
-    #     self.epsilon = epsilon
-    #     self.n_actions = n_actions
-    #     self.min_vals = min_vals
-    #     self.max_vals = max_vals
-    #     self.alpha = alpha or 0.1/8
-
-    def __init__(self, n_actions, agent_params={}, train_params={}, device="", n_state=2):
+    def __init__(self, n_actions, agent_params={}, train_params={}, device="",
+                 n_state=2):
         self.n_actions = n_actions
         self.n_state = n_state
         self.last_state = None
@@ -77,7 +67,6 @@ class TorchQAgentBase:
     def initialize(self, state):
         self.last_state = state
         self.last_features = self.state_to_features(state)
-        # self.last_action = self.select_action(state)
         self.last_action = self.select_action(features=self.last_features)
         return self.last_action
 
@@ -110,25 +99,6 @@ class TorchQAgentBase:
             ax.plot_surface(grid_x, grid_y, time_to_go); plt.show()
 
         return q_vals
-
-
-# class TorchQAgentBase(MountainCarAgent):
-
-#     # def __init__(self, n_actions, gamma=1.0, epsilon=1e-8,
-#     #              min_vals=MIN_VALS, max_vals=MAX_VALS,
-#     #              alpha=0.1/8, device="cpu"):
-#     #     super().__init__(
-#     #         n_actions, min_vals=min_vals, max_vals=max_vals,
-#     #         gamma=gamma, epsilon=epsilon, alpha=alpha,
-#     #     )
-#     #     self.device = device
-#     #     self.mu = (torch.tensor(max_vals) + torch.tensor(min_vals))/2.0
-#     #     self.sigma = (torch.tensor(max_vals) - torch.tensor(min_vals))/2.0
-
-#     def __init__(self, n_actions, agent_params={}, train_params={}, device="cpu"):
-
-#         super().__init__(n_actions, agent_params, train_params, device)
-
 
     def state_to_features(self, state):
         features = (
@@ -191,14 +161,6 @@ class TorchQAgentBase:
 
 
 class TiledLinearQAgent(TorchQAgentBase):
-
-    # def __init__(self, n_actions, n_grid=8, n_tiles=8,
-    #              min_vals=MIN_VALS, max_vals=MAX_VALS,
-    #              alpha=0.1/8):
-    #     super().__init__(
-    #         n_actions, min_vals=min_vals, max_vals=max_vals,
-    #         gamma=1.0, epsilon=1e-8, alpha=alpha,
-    #     )
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="cpu"):
         super().__init__(n_actions, agent_params, train_params, device)
@@ -282,26 +244,6 @@ class FFWQAgent(TorchQAgentBase):
             self.n_layers = agent_params.get('n_layers', 3)
             self.n_hidden = [n_hidden] * self.n_layers
 
-        # self.n_state = 2
-        # min_vals = agent_params.get('min_vals', MIN_VALS)
-        # max_vals = agent_params.get('max_vals', MAX_VALS)
-
-        # gamma = agent_params.get('gamma', 1.0)
-        # epsilon = agent_params.get('epsilon', 1e-2)
-        # alpha = agent_params.get('alpha', 1e-6)
-
-        # self.dropout = agent_params.get('dropout', 0.0)
-
-        # self.train_params = train_params
-        # self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
-        # alpha = self.train_params.pop('alpha', None)
-        # if alpha is not None:
-        #     self.train_params['lr'] = alpha
-
-        # super().__init__(
-        #     n_actions, min_vals=min_vals, max_vals=max_vals,
-        #     gamma=gamma, epsilon=epsilon, alpha=alpha, device=device
-        # )
         self.reset()
 
     def reset(self):
@@ -315,8 +257,6 @@ class FFWQAgent(TorchQAgentBase):
             )
             if is_not_last:
                 layers.append(nn.ReLU())
-                # if self.dropout:
-                #     layers.append(nn.Dropout(p=self.dropout))
             last_out = next_out
 
         self.net = nn.Sequential(

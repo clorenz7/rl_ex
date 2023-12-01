@@ -6,13 +6,14 @@ import argparse
 from copy import deepcopy
 import datetime
 import json
+import os
 import pprint
 import time
 
 import gymnasium as gym
 import joblib
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FormatStrFormatter;
+from matplotlib.ticker import FormatStrFormatter
 import numpy as np
 import torch
 
@@ -129,6 +130,23 @@ class AgentFactory:
         )
 
 
+def plot_single_experiment_result(run_steps, save_loc=None):
+    avg_steps = np.mean(run_steps, axis=1);
+
+    plt.semilogy(avg_steps);
+    ax = plt.gca();
+    ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
+    ax.yaxis.set_major_formatter(FormatStrFormatter("%d"));
+    plt.grid(which="both");
+    plt.xlabel('Episode #');
+    plt.ylim(bottom=100);
+    plt.ylabel('Avg # of Steps to Reach Goal');
+
+    if save_loc is not None:
+        plt.savefig(save_loc)
+    plt.show()
+
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -146,15 +164,24 @@ def main():
         '-g', "--no_gpu", action="store_true",
         help="Turn off GPU acceleration"
     )
+    parser.add_argument(
+        '-o', '--out_dir', default=os.path.expanduser("~"),
+        help="Where to store results"
+    )
 
     cli_args = parser.parse_args()
     date_time = datetime.datetime.now().strftime('%Y_%b_%d_%H_%M')
 
+    os.makedirs(cli_args.out_dir, exist_ok=True)
+
     if cli_args.json:
         with open(cli_args.json, 'r') as fp:
             json_params = json.load(fp)
+
+        base_name = cli_args.json.rsplit(".", 1)[0]
     else:
         json_params = {}
+        base_name = date_time
     default_agent_type = "actor-critic" if "ac" in cli_args.json else "deepq"
     pprint.pprint(json_params)
 
@@ -213,13 +240,16 @@ def main():
                 all_episodes[i, j, :, :] = run_steps
 
         param_vals = [v for v in param_study.values()]
-        joblib.dump({
+        result = {
             "all_episodes": all_episodes,
             "metric": metric,
             "keys": param_keys,
             "values": param_vals,
             "exp_params": exp_params.to_dict(),
-        }, f"param_study_{date_time}.joblib")
+        }
+        descrip = "param_study" if base_name == date_time else base_name
+        out_file = os.path.join(cli_args.out_dir, f"{descrip}_{date_time}.joblib")
+        joblib.dump(result, out_file)
         # idx= 0; plt.semilogy(np.arange(0, 60), metric[ :, idx, :].T); plt.legend(param_vals[0]); plt.title(f'Weight Decay {param_vals[1][idx]:0.1e}'); plt.ylim(bottom=100); plt.show()
     else:
         # Just a single evaluation
@@ -232,17 +262,9 @@ def main():
             **exp_params.simulation_params
         )
 
-        avg_steps = np.mean(run_steps, axis=1)
-
-        plt.semilogy(avg_steps);
-        ax = plt.gca();
-        ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
-        ax.yaxis.set_major_formatter(FormatStrFormatter("%d"));
-        plt.grid(which="both");
-        plt.xlabel('Episode #');
-        plt.ylim(bottom=100);
-        plt.ylabel('Avg # of Steps to Reach Goal');
-        plt.show()
+        descrip = "result" if base_name == date_time else base_name
+        save_loc = os.path.join(cli_args.out_dir, f"{descrip}_{date_time}.png")
+        plot_single_experiment_result(run_steps, save_loc=save_loc)
 
     import ipdb; ipdb.set_trace()
 
