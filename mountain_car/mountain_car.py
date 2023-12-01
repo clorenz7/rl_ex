@@ -147,6 +147,7 @@ def plot_single_experiment_result(run_steps, save_loc=None):
 
     if save_loc is not None:
         plt.savefig(save_loc)
+        print(f"Saved plot to {save_loc}")
     plt.show()
 
 
