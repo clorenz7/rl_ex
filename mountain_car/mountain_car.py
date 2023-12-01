@@ -150,6 +150,34 @@ def plot_single_experiment_result(run_steps, save_loc=None):
         print(f"Saved plot to {save_loc}")
     plt.show()
 
+def plot_parameter_study(result, save_base=None):
+
+    metric = result['metric'];
+    param_vals = result['values'];
+    n_episodes = metric.shape[-1];
+    leg_param_name = result['keys'][0].rsplit(".", 1)[-1];
+
+    for idx in range(metric.shape[1]):
+        plt.figure(idx+1);
+        plt.semilogy(np.arange(0, n_episodes), metric[:, idx, :].T);
+        legend = [f'{leg_param_name} {v}' for v in param_vals[0]];
+        plt.legend(legend);
+        ax = plt.gca();
+        ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
+        ax.yaxis.set_major_formatter(FormatStrFormatter("%d"));
+        param_name = result['keys'][1].rsplit(".", 1)[-1];
+        plt.title(f'{param_name} {param_vals[1][idx]:0.1e}');
+        plt.xlabel('Episode #');
+        plt.ylim(bottom=100);
+        plt.ylabel('Avg # of Steps to Reach Goal');
+
+        if save_base is not None:
+            save_loc = f'{save_base}_{idx}.png'
+            plt.savefig(save_loc)
+            print(f"Saved plot to {save_loc}")
+
+    plt.show()
+
 
 def main():
 
@@ -254,7 +282,8 @@ def main():
         descrip = "param_study" if base_name == date_time else base_name
         out_file = os.path.join(cli_args.out_dir, f"{descrip}_{date_time}.joblib")
         joblib.dump(result, out_file)
-        # idx= 0; plt.semilogy(np.arange(0, 60), metric[ :, idx, :].T); plt.legend(param_vals[0]); plt.title(f'Weight Decay {param_vals[1][idx]:0.1e}'); plt.ylim(bottom=100); plt.show()
+        save_base = os.path.join(cli_args.out_dir, f"{descrip}_{date_time}_sweep")
+        plot_parameter_study(result, save_base=save_base)
     else:
         # Just a single evaluation
         agent = factory.get(
