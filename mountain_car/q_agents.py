@@ -135,7 +135,7 @@ class TorchQAgentBase:
                 last_value = self.net(self.last_features)[self.last_action]
             self.net.train()
 
-        if True:
+        if False:
             delta = (
                 (reward + self.gamma * next_state_value) -
                 # self.net(self.last_features)[self.last_action]
@@ -182,7 +182,7 @@ class TorchQAgentBase:
         #     reward - self.net(last_features)[self.last_action]
         # )
         # loss = (reward - self.net(last_features).max())**2
-        if True:
+        if False:
             loss = (reward - self.last_action_value)**2
         else:
             loss = F.smooth_l1_loss(
