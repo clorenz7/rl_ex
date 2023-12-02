@@ -163,6 +163,7 @@ def plot_parameter_study(result, save_base=None):
         legend = [f'{leg_param_name} {v}' for v in param_vals[0]];
         plt.legend(legend);
         ax = plt.gca();
+        plt.grid(which="both");
         ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
         ax.yaxis.set_major_formatter(FormatStrFormatter("%d"));
         param_name = result['keys'][1].rsplit(".", 1)[-1];
@@ -283,6 +284,7 @@ def main():
         out_file = os.path.join(cli_args.out_dir, f"{descrip}_{date_time}.joblib")
         joblib.dump(result, out_file)
         save_base = os.path.join(cli_args.out_dir, f"{descrip}_{date_time}_sweep")
+
         plot_parameter_study(result, save_base=save_base)
     else:
         # Just a single evaluation
