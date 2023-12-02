@@ -162,6 +162,7 @@ def plot_parameter_study(result, save_base=None):
         plt.semilogy(np.arange(0, n_episodes), metric[:, idx, :].T);
         legend = [f'{leg_param_name} {v}' for v in param_vals[0]];
         plt.legend(legend);
+        plt.grid(which="both");
         ax = plt.gca();
         ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
         ax.yaxis.set_major_formatter(FormatStrFormatter("%d"));
