@@ -29,6 +29,7 @@ class TorchQAgentBase:
         self.epsilon = self.agent_params.get('epsilon', 1e-8)
         self.min_vals = self.agent_params.get('min_vals', MIN_VALS)
         self.max_vals = self.agent_params.get('max_vals', MAX_VALS)
+        self.use_smooth_l1_loss = self.agent_params.get('use_smooth_l1_loss', False)
         self.mu = (
             torch.tensor(self.max_vals) + torch.tensor(self.min_vals)
         ) / 2.0
@@ -135,7 +136,7 @@ class TorchQAgentBase:
                 last_value = self.net(self.last_features)[self.last_action]
             self.net.train()
 
-        if False:
+        if not self.use_smooth_l1_loss:
             delta = (
                 (reward + self.gamma * next_state_value) -
                 # self.net(self.last_features)[self.last_action]
@@ -182,7 +183,7 @@ class TorchQAgentBase:
         #     reward - self.net(last_features)[self.last_action]
         # )
         # loss = (reward - self.net(last_features).max())**2
-        if False:
+        if not self.use_smooth_l1_loss:
             loss = (reward - self.last_action_value)**2
         else:
             loss = F.smooth_l1_loss(
