@@ -196,6 +196,9 @@ class TorchQAgentBase:
         self.optimizer.step()
         self.optimizer.zero_grad(set_to_none=True)
 
+    def checkpoint(self, file_name):
+        torch.save(self.net, file_name)
+
 
 class TiledLinearQAgent(TorchQAgentBase):
 

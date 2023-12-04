@@ -259,4 +259,6 @@ class MountainCarActorCriticAgent:
                 **self.train_params.get('critic', {})
             )
 
+    def checkpoint(self, file_name):
+        torch.save(self.net, file_name)
 

@@ -24,11 +24,12 @@ import ac_agents
 DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "rl_results")
 
 
-def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
+def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
                     eval_episodes={}, max_steps=[10000, 10000], verbose=True,
-                    render=False):
+                    render=False, checkpoint_interval=None):
 
     run_steps = np.zeros((n_episodes, n_runs))
+    checkpoint_interval = checkpoint_interval or 1000000000
 
     if isinstance(max_steps, int):
         max_steps = [max_steps]*2
@@ -37,6 +38,7 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
 
     state, info = env.reset(seed=seed)
     for r_idx in range(n_runs):
+        agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep0.chkpt.pt"))
         for e_idx in range(n_episodes):
             s_idx = 0
             action_idx = agent.initialize(state)
@@ -67,6 +69,9 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                 final_state = "reached goal"
                 agent.finish(reward)
             elap = round((time.time() - st)/60, 2)
+
+            if (e_idx % checkpoint_interval) == 0:
+                agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx}.chkpt.pt"))
             # agent.evaluate_q()
             # Record result and display if desired
             run_steps[e_idx, r_idx] = s_idx
@@ -76,7 +81,11 @@ def experiment_loop(env, agent, seed=101, n_runs=100, n_episodes=500,
                 q_vals = agent.evaluate_q()
 
             state, info = env.reset()
+
+        agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx}.chkpt.pt"))
+
         agent.reset()
+
 
     return run_steps
 
@@ -266,7 +275,7 @@ def main():
 
                 agent = factory.get(agent_params, train_params)
                 run_steps = experiment_loop(
-                    env, agent, render=render_mode,
+                    env, agent, cli_args.out_dir, render=render_mode,
                     **exp_params.simulation_params
                 )
                 avg_steps = np.mean(run_steps, axis=1)
@@ -294,7 +303,7 @@ def main():
             exp_params.train_params,
         )
         run_steps = experiment_loop(
-            env, agent, render=render_mode,
+            env, agent, cli_args.out_dir, render=render_mode,
             **exp_params.simulation_params
         )
 
