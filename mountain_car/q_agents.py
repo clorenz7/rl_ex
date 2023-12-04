@@ -183,11 +183,12 @@ class TorchQAgentBase:
         #     reward - self.net(last_features)[self.last_action]
         # )
         # loss = (reward - self.net(last_features).max())**2
+
         if not self.use_smooth_l1_loss:
             loss = (reward - self.last_action_value)**2
         else:
             loss = F.smooth_l1_loss(
-                torch.tensor([reward]),
+                torch.tensor(reward, device=self.device),
                 self.last_action_value
             )
         loss.backward()
