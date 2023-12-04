@@ -136,14 +136,15 @@ class AgentFactory:
 def plot_single_experiment_result(run_steps, save_loc=None):
     avg_steps = np.mean(run_steps, axis=1);
 
-    plt.semilogy(avg_steps);
+    plt.semilogy(np.arange(run_steps.shape[0]), run_steps, linewidth=0.5);
+    plt.semilogy(avg_steps, 'k', linewidth=2);
     ax = plt.gca();
     ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
     ax.yaxis.set_major_formatter(FormatStrFormatter("%d"));
     plt.grid(which="both");
     plt.xlabel('Episode #');
     plt.ylim(bottom=100);
-    plt.ylabel('Avg # of Steps to Reach Goal');
+    plt.ylabel('# of Steps to Reach Goal');
 
     if save_loc is not None:
         plt.savefig(save_loc)
