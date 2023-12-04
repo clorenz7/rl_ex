@@ -163,16 +163,19 @@ class TorchQAgentBase:
 
     def finish(self, reward):
         self.optimizer.zero_grad(set_to_none=True)
-        last_features = self.state_to_features(self.last_state)
+        # last_features = self.state_to_features(self.last_state)
 
         # loss = (
         #     reward - self.net(last_features)[self.last_action]
         # )
+        # last_action_value = self.net(last_features).max()
+        # It shoudl actually be the last action....
+        last_action_value = self.net(self.last_features)[self.last_action]
+
         if self.use_smooth_l1_loss:
-            # It shoudl actually be the last action....
-            loss = F.smooth_l1_loss(torch.tensor([reward]), self.net(last_features).max())
+            loss = F.smooth_l1_loss(torch.tensor([reward]), last_action_value)
         else:
-            loss = (reward - self.net(last_features).max())**2
+            loss = (reward - last_action_value)**2
         loss.backward()
         self.optimizer.step()
 
