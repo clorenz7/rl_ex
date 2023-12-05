@@ -13,6 +13,19 @@ MIN_VALS = [-1.2, -0.07]
 MAX_VALS = [0.6, 0.07]
 
 
+class ActivationFactory:
+    _MAP = {
+        'relu': nn.ReLU,
+        'elu': nn.ELU,
+    }
+
+    def get(self, activation_name):
+        return self._MAP[activation_name.lower()]()
+
+
+activation_factory = ActivationFactory()
+
+
 class TorchQAgentBase:
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="",
@@ -56,15 +69,6 @@ class TorchQAgentBase:
     def select_action(self, state=None, features=None):
         if state is not None:
             features = self.state_to_features(state)
-
-        # with torch.no_grad():
-        #     action_vals = self.net(features)
-        #     action_idx = int(torch.argmax(action_vals))
-        #     # max_val = action_vals[action_idx].item()
-        #     if random.random() < self.epsilon:
-        #         action_idx = random.randint(0, self.n_actions-1)
-        #     action_value = action_vals[action_idx]
-        # # return action_idx, max_val
 
         action_vals = self.net(features)
         action_idx = int(torch.argmax(action_vals))
@@ -129,12 +133,9 @@ class TorchQAgentBase:
         if debug:
             weights = self.net[0].weight.clone().detach()
         features = self.state_to_features(state)
-        # next_action, next_state_value = self.select_action(features=features)
 
         with torch.no_grad():
             self.net.eval()
-            # next_value = torch.max(self.net(features))[next_action].item()
-            # next_state_value = self.net(features).max().item()
             next_state_value = self.net(features).max()
             if debug:
                 last_value = self.net(self.last_features)[self.last_action]
@@ -143,7 +144,6 @@ class TorchQAgentBase:
         if not self.use_smooth_l1_loss:
             delta = (
                 (reward + self.gamma * next_state_value) -
-                # self.net(self.last_features)[self.last_action]
                 self.last_action_value
             )
             loss = delta ** 2
@@ -180,14 +180,6 @@ class TorchQAgentBase:
         return self.last_action
 
     def finish(self, reward):
-        # self.optimizer.zero_grad(set_to_none=True)
-        # last_features = self.state_to_features(self.last_state)
-
-        # loss = (
-        #     reward - self.net(last_features)[self.last_action]
-        # )
-        # loss = (reward - self.net(last_features).max())**2
-
         if not self.use_smooth_l1_loss:
             loss = (reward - self.last_action_value)**2
         else:
@@ -275,19 +267,6 @@ class TiledLinearQAgentSutton(TiledLinearQAgent):
         return features
 
 
-class ActivationFactory:
-    _MAP = {
-        'relu': nn.ReLU,
-        'elu': nn.ELU,
-    }
-
-    def get(self, activation_name):
-        return self._MAP[activation_name.lower()]()
-
-
-activation_factory = ActivationFactory()
-
-
 class FFWQAgent(TorchQAgentBase):
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="cpu"):
@@ -315,7 +294,6 @@ class FFWQAgent(TorchQAgentBase):
                 nn.Linear(last_out, next_out, bias=True)
             )
             if is_not_last:
-                # layers.append(nn.ReLU())
                 layers.append(
                     activation_factory.get(self.activation_name)
                 )
