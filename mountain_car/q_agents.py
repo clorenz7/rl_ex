@@ -17,6 +17,10 @@ class ActivationFactory:
     _MAP = {
         'relu': nn.ReLU,
         'elu': nn.ELU,
+        'hardtanh': nn.Hardtanh,
+        'tanh': nn.Tanh,
+        'sigmoid': nn.Sigmoid,
+        'hardsigmoid': nn.Hardsigmoid,
     }
 
     def get(self, activation_name):

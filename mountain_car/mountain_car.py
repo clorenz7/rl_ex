@@ -72,8 +72,8 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
                 agent.finish(reward)
             elap = round((time.time() - st)/60, 2)
 
-            if (e_idx % checkpoint_interval) == 0:
-                agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx}.chkpt.pt"))
+            if ((e_idx+1) % checkpoint_interval) == 0:
+                agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx+1}.chkpt.pt"))
             # agent.evaluate_q()
             # Record result and display if desired
             run_steps[e_idx, r_idx] = s_idx
@@ -84,7 +84,7 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
 
             state, info = env.reset()
 
-        agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx}.chkpt.pt"))
+        agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx+1}.chkpt.pt"))
 
         agent.reset()
 
