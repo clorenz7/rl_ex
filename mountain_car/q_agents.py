@@ -135,30 +135,33 @@ class TorchQAgentBase:
         features = self.state_to_features(state)
 
         with torch.no_grad():
+            # Empirically found that doing action selection here was much more stable
+            next_action, next_action_value = self.select_action(features=features)
+
             self.net.eval()
-            next_state_value = self.net(features).max()
+            next_state_value = self.net(features).max().detach()
             if debug:
                 last_value = self.net(self.last_features)[self.last_action]
             self.net.train()
 
+        self.optimizer.zero_grad(set_to_none=True)
+        last_action_value = self.net(self.last_features)[self.last_action]
+
         if not self.use_smooth_l1_loss:
             delta = (
                 (reward + self.gamma * next_state_value) -
-                self.last_action_value
+                last_action_value
             )
             loss = delta ** 2
         else:
             loss = F.smooth_l1_loss(
                 reward + self.gamma * next_state_value,
-                self.last_action_value
+                last_action_value
             )
         if debug:
             loss.retain_grad()
         loss.backward()
         self.optimizer.step()
-        self.optimizer.zero_grad(set_to_none=True)
-
-        next_action, next_action_value = self.select_action(features=features)
 
         if debug:
             # This is sanity checking.
@@ -180,17 +183,19 @@ class TorchQAgentBase:
         return self.last_action
 
     def finish(self, reward):
+
+        self.optimizer.zero_grad(set_to_none=True)
+        last_action_value = self.net(self.last_features)[self.last_action]
+
         if not self.use_smooth_l1_loss:
-            loss = (reward - self.last_action_value)**2
+            loss = (reward - last_action_value)**2
         else:
             loss = F.smooth_l1_loss(
                 torch.tensor(reward, device=self.device),
-                self.last_action_value
+                last_action_value
             )
         loss.backward()
-
         self.optimizer.step()
-        self.optimizer.zero_grad(set_to_none=True)
 
     def checkpoint(self, file_name):
         torch.save(self.net, file_name)
