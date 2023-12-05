@@ -258,7 +258,7 @@ def main():
         with open(cli_args.json, 'r') as fp:
             json_params = json.load(fp)
 
-        base_name = cli_args.json.rsplit(".", 1)[0]
+        base_name = os.path.basename(cli_args.json).rsplit(".", 1)[0]
     else:
         json_params = {}
         base_name = date_time
