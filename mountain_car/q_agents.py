@@ -110,7 +110,11 @@ class TorchQAgentBase:
         if show_v:
             time_to_go = -np.max(q_vals, axis=2)
             fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-            ax.plot_surface(grid_x, grid_y, time_to_go); plt.show()
+            ax.plot_surface(grid_x, grid_y, time_to_go);
+            ax.set_xlabel("Position")
+            ax.set_ylabel("Velocity")
+            ax.set_zlabel("-V(s): steps to goal")
+            plt.show()
 
         return q_vals
 
@@ -271,6 +275,19 @@ class TiledLinearQAgentSutton(TiledLinearQAgent):
         return features
 
 
+class ActivationFactory:
+    _MAP = {
+        'relu': nn.ReLU,
+        'elu': nn.ELU,
+    }
+
+    def get(self, activation_name):
+        return self._MAP[activation_name.lower()]()
+
+
+activation_factory = ActivationFactory()
+
+
 class FFWQAgent(TorchQAgentBase):
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="cpu"):
@@ -283,6 +300,8 @@ class FFWQAgent(TorchQAgentBase):
         else:
             self.n_layers = agent_params.get('n_layers', 3)
             self.n_hidden = [n_hidden] * self.n_layers
+
+        self.activation_name = agent_params.get('activation', 'elu')
 
         self.reset()
 
@@ -297,7 +316,9 @@ class FFWQAgent(TorchQAgentBase):
             )
             if is_not_last:
                 # layers.append(nn.ReLU())
-                layers.append(nn.ELU())
+                layers.append(
+                    activation_factory.get(self.activation_name)
+                )
             last_out = next_out
 
         self.net = nn.Sequential(

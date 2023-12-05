@@ -31,6 +31,8 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
     run_steps = np.zeros((n_episodes, n_runs))
     checkpoint_interval = checkpoint_interval or 1000000000
 
+    os.makedirs(out_dir, exist_ok=1)
+
     if isinstance(max_steps, int):
         max_steps = [max_steps]*2
 
@@ -142,10 +144,10 @@ class AgentFactory:
         )
 
 
-def plot_single_experiment_result(run_steps, save_loc=None):
+def plot_single_experiment_result(run_steps, save_loc=None, add_legend=False):
     avg_steps = np.mean(run_steps, axis=1);
 
-    plt.semilogy(np.arange(run_steps.shape[0]), run_steps, linewidth=0.5);
+    plt.semilogy(np.arange(run_steps.shape[0]), run_steps, linewidth=0.8);
     plt.semilogy(avg_steps, 'k', linewidth=2);
     ax = plt.gca();
     ax.yaxis.set_minor_formatter(FormatStrFormatter("%d"));
@@ -155,10 +157,16 @@ def plot_single_experiment_result(run_steps, save_loc=None):
     plt.ylim(bottom=100);
     plt.ylabel('# of Steps to Reach Goal');
 
+    if add_legend:
+        legend = [str(i) for i in range(run_steps.shape[1])]
+        legend.append('Mean')
+        plt.legend(legend)
+
     if save_loc is not None:
         plt.savefig(save_loc)
         print(f"Saved plot to {save_loc}")
     plt.show()
+
 
 def plot_parameter_study(result, save_base=None):
 
@@ -190,6 +198,27 @@ def plot_parameter_study(result, save_base=None):
     plt.show()
 
 
+def plot_q_deltas(q_vals):
+
+    plt.subplot(2, 2, 1);
+    plt.imshow(q_vals[:, :, 0] - q_vals[:, :, 1]);
+    plt.title("Q(s,a=0) - Q(s,a=1)")
+    plt.colorbar();
+    plt.subplot(2, 2, 2);
+    plt.imshow(q_vals[:, :, 1] - q_vals[:, :, 2]);
+    plt.title("Q(s,a=1) - Q(s,a=2)")
+    plt.colorbar();
+    plt.subplot(2, 2, 3);
+    plt.imshow(q_vals[:, :, 0] - q_vals[:, :, 2]);
+    plt.title("Q(s,a=0) - Q(s,a=2)")
+    plt.colorbar();
+    plt.subplot(2, 2, 4);
+    plt.imshow(np.argmax(q_vals, axis=2));
+    plt.colorbar();
+    plt.title("$\pi(s)$")
+
+    plt.show()
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -210,6 +239,14 @@ def main():
     parser.add_argument(
         '-o', '--out_dir', default=DEFAULT_DIR,
         help="Where to store results"
+    )
+    parser.add_argument(
+        '-f', "--forensic", type=str,
+        help="Render the resulting value functions"
+    )
+    parser.add_argument(
+        '-d', "--details", type=str,
+        help="Render the details of a sweep CSV of indexes"
     )
 
     cli_args = parser.parse_args()
@@ -251,6 +288,28 @@ def main():
 
     factory = AgentFactory(agent_type, n_actions, device=device)
 
+    if cli_args.details:
+        sweep_data = joblib.load(cli_args.forensic)
+
+        i, j = [int(i) for i in cli_args.details.split(",")]
+
+        run_steps = sweep_data['all_episodes'][i, j, :, :]
+
+        plot_single_experiment_result(run_steps, add_legend=True)
+        import ipdb; ipdb.set_trace()
+
+    if cli_args.forensic:
+        net = torch.load(cli_args.forensic).to(device)
+        agent = factory.get(
+            exp_params.agent_params,
+            exp_params.train_params,
+        )
+        agent.net = net
+        q_vals = agent.evaluate_q(show_v=True)
+        plot_q_deltas(q_vals)
+        import ipdb; ipdb.set_trace()
+
+
     if param_study:
         param_keys = [k for k in param_study.keys()]
         n_vals = [len(v) for v in param_study.values()]
@@ -275,7 +334,9 @@ def main():
 
                 agent = factory.get(agent_params, train_params)
                 run_steps = experiment_loop(
-                    env, agent, cli_args.out_dir, render=render_mode,
+                    env, agent,
+                    out_dir=os.path.join(cli_args.out_dir, f"sweep{i}_{j}"),
+                    render=render_mode,
                     **exp_params.simulation_params
                 )
                 avg_steps = np.mean(run_steps, axis=1)
