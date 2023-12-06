@@ -16,6 +16,7 @@ MAX_VALS = [0.6, 0.07]
 class ActivationFactory:
     _MAP = {
         'relu': nn.ReLU,
+        'relu6': nn.ReLU6,
         'elu': nn.ELU,
         'hardtanh': nn.Hardtanh,
         'tanh': nn.Tanh,

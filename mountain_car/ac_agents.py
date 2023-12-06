@@ -260,5 +260,5 @@ class MountainCarActorCriticAgent:
             )
 
     def checkpoint(self, file_name):
-        torch.save(self.net, file_name)
-
+        torch.save(self.actor, file_name + ".actor")
+        torch.save(self.critic, file_name + ".critic")
