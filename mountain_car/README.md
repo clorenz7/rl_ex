@@ -56,19 +56,22 @@ As can be seen, there is a lot of variance in the performance. This was also see
 
 1. Doing single step updates to the Q-fuction, which are noisier.
 2. Lots of initial time steps where the goal is not reached which can mis-calibrate the Q-function, which is trying to regress the true value.
-3. Learning rate might be too high at end.
-4. Neural network needing more layers to represent a more complex function, but such complexity being difficult to learn from the environment returns.
+3. Learning rate might be too high at end, or in general.
+4. Neural network needing more layers to represent a more complex function, but such complexity being difficult to learn from the environment returns, since terminations are sparse.
 
-We can see the learned $max_a Q(s,a) $ for a model that performed well:
+We can see the learned $V(s) = max_a Q(s,a) $ and the policy for a model that performed well:
 
-```
-ADD THIS
-```
-And one that did not:
+![Q_Vest](./assets/mc_deepq_dec05_sweep_Vest_run3_ep60.png)
 
-```
-ADD THIS
-```
+(The state value estimate is very different than the value in the text book!)
+
+![Q_policy](./assets/mc_deepq_dec05_sweep_policy_run3_ep60.png)
+
+We can watch the agent for one episode here:
+
+![Q_agent](./assets/mc_deepq_dec05_sweep_run1_ep1.gif)
+
+The policy which solves the maze is not the policy visualized above. This suggests that the agent is re-learning optimal behavior on each episode (which subsequent analysis confirmed). This suggests the model is learning poorly.
 
 
 I ultimately decided to move on since there were other algorithms to try which are more suited to the problem. If I had to obtain better performance out of this algorithm, I would:
@@ -79,7 +82,7 @@ I ultimately decided to move on since there were other algorithms to try which a
 4. Investigate other model architectures: deeper, wider, and/or other activation functions.
 5. Implement early stopping and/or re-initializing when performance degrades or goal is never reached after X episodes.
 6. Tweak the network initialization in order to always start close to zero value.
-7. Run a parameter sweep on the exploration parameter (epsilon).
+7. Run a parameter sweep on the exploration and discount parameters ($\epsilon$ and  $\gamma$).
 
 ## Actor-Critic
 
@@ -136,5 +139,5 @@ Here are the policy and value functions for a single run at episode 120 which ha
 ![ac_policy2](./assets/policy_ac_dec11_gam2_run0_ep120.png)
 
 
-This motivates me to implement Asynchronous Advantage Actor Critic (A2C / A3C)! (Asynchronous multiple agents doing batch updates will also help with learning stability I bet) And preferably on a new problem. I may be legally obligated to change my name to Kate Bush after running up that hill so many times! ;P
+This issue with the discount factor $\gamma$ motivates me to implement Asynchronous Advantage Actor Critic (A2C / A3C)! (Asynchronous multiple agents doing batch updates will also help with learning stability I bet) And preferably on a new problem. I may be legally obligated to change my name to Kate Bush after running up that hill so many times! ;P
 

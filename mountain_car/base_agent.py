@@ -4,8 +4,7 @@ import torch
 
 class BaseAgent:
 
-    def get_grid(self):
-        n_mesh = 100
+    def get_grid(self, n_mesh=100):
         x = torch.linspace(
             self.min_vals[0] + 1e-3,
             self.max_vals[0] - 1e-3,
@@ -25,3 +24,12 @@ class BaseAgent:
         features = torch.vstack(features).to(self.device)
 
         return features, grid_x.numpy(), grid_y.numpy()
+
+    def bound(self, state, eps=1e-4):
+        for i in range(len(state)):
+            state[i] = max(
+                min(state[i], self.max_vals[i]-eps),
+                self.min_vals[i] + eps
+            )
+        return state
+

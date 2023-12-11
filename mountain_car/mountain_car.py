@@ -160,9 +160,13 @@ class AgentFactory:
 
     def get(self, agent_params, train_params):
         constructor = self._AGENTS[self.agent_type]
-        return constructor(
+        agent = constructor(
             self.n_actions, agent_params, train_params, device=self.device
         )
+        load_file = agent_params.get('load_checkpoint', None)
+        if load_file:
+            agent.load(load_file)
+        return agent
 
 
 def plot_single_experiment_result(run_steps, save_loc=None, add_legend=False):
@@ -324,13 +328,18 @@ def main():
             exp_params.agent_params,
             exp_params.train_params,
         )
-        # net = torch.load(cli_args.forensic).to(device)
         agent.load(cli_args.forensic)
         agent.visualize()
-        # agent.net = net
-        # q_vals = agent.evaluate_q(show_v=True)
-        # plot_q_deltas(q_vals)
+        if cli_args.out_dir:
+            run_steps = experiment_loop(
+                env, agent, cli_args.out_dir,
+                **exp_params.simulation_params
+            )
+            # Visualize again to check policy stability
+            agent.visualize()
         import ipdb; ipdb.set_trace()
+        import sys
+        sys.exit(0)
 
 
     if param_study:
