@@ -1,11 +1,13 @@
 from functools import partial
 
+import numpy as np
+import matplotlib.pyplot as plt
 import torch
 from torch import nn
-
-
 from torch.distributions import Categorical
 import torch.nn.functional as F
+
+from base_agent import BaseAgent
 
 MIN_VALS = [-1.2, -0.07]
 MAX_VALS = [0.6, 0.07]
@@ -49,7 +51,7 @@ def net_from_layer_sizes(layer_sizes, activation=nn.ELU, final_activation=None):
     return nn.Sequential(*layers)
 
 
-class MountainCarActorCriticAgent:
+class MountainCarActorCriticAgent(BaseAgent):
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="cpu"):
         self.last_state = None
@@ -262,3 +264,41 @@ class MountainCarActorCriticAgent:
     def checkpoint(self, file_name):
         torch.save(self.actor, file_name + ".actor")
         torch.save(self.critic, file_name + ".critic")
+
+    def load(self, actor_critic_base: str):
+        # actor_file, critic_file = actor_critic_files.split(",")
+        actor_file = actor_critic_base + ".actor"
+        critic_file = actor_critic_base + ".critic"
+        self.actor = torch.load(actor_file).to(self.device)
+        self.critic = torch.load(critic_file).to(self.device)
+
+    def visualize(self):
+        features, grid_x, grid_y = self.get_grid()
+        n_mesh = grid_x.shape[0]
+        with torch.no_grad():
+            action_probs = self.actor(features).reshape([n_mesh, n_mesh, 3]).cpu().numpy()
+            v_est = self.critic(features).reshape([n_mesh, n_mesh]).cpu().numpy()
+
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        ax.plot_surface(grid_x, grid_y, -v_est);
+        ax.set_xlabel("Position")
+        ax.set_ylabel("Velocity")
+        ax.set_zlabel("-V(s): steps to goal")
+
+        plt.figure(2)
+        tick_idx = np.linspace(1, grid_x.shape[0], 6, dtype=int) - 1
+        x_ticks = np.round(grid_x[tick_idx, 0], 1);
+        y_ticks = np.round(grid_y[0, tick_idx], 2);
+        plt.imshow(np.argmax(action_probs, axis=2).T);
+        plt.yticks(tick_idx, y_ticks);
+        plt.xticks(tick_idx, x_ticks);
+        plt.xlabel('Position');
+        plt.ylabel('Velocity');
+        plt.colorbar();
+        plt.title("$\pi(s)$");
+        plt.show()
+
+        import ipdb; ipdb.set_trace()
+
+
+

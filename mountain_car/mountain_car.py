@@ -11,6 +11,7 @@ import pprint
 import time
 
 import gymnasium as gym
+import imageio
 import joblib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
@@ -24,9 +25,19 @@ import ac_agents
 DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "rl_results")
 
 
+
+def write_gif(frames, output_path):
+    with imageio.get_writer(output_path, mode='I', duration=0.03) as writer:
+        for frame in frames:
+            # Convert the NumPy array to uint8 (expected format by imageio)
+            writer.append_data(frame)
+
+    print(f"GIF created and saved at {output_path}")
+
+
 def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
                     eval_episodes={}, max_steps=[10000, 10000], verbose=True,
-                    render=False, checkpoint_interval=None):
+                    checkpoint_interval=None, output_gif=False):
 
     run_steps = np.zeros((n_episodes, n_runs))
     checkpoint_interval = checkpoint_interval or 1000000000
@@ -42,18 +53,23 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
     for r_idx in range(n_runs):
         agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep0.chkpt.pt"))
         for e_idx in range(n_episodes):
+            frame_buffer = []
             s_idx = 0
             action_idx = agent.initialize(state)
+            if output_gif:
+                frame_buffer.append(env.render())
             trajectory = [state]
             actions = []
             st = time.time()
             state, reward, terminated, _, _ = env.step(action_idx)
+            if output_gif:
+                frame_buffer.append(env.render())
             while not terminated:
                 action_idx = agent.step(reward, state)
                 state, reward, terminated, _, _ = env.step(action_idx)
-                if render:
-                    if (s_idx+1) % 500 == 0:
-                        print(f"Episode {e_idx} Step {s_idx+1}")
+                if output_gif:
+                    frame_buffer.append(env.render())
+
                 trajectory.append(state)
                 s_idx += 1
                 actions.append(action_idx)
@@ -70,6 +86,11 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
             if terminated:
                 final_state = "reached goal"
                 agent.finish(reward)
+
+            if output_gif:
+                out_file = os.path.join(out_dir, f"run{r_idx+1}_ep{e_idx+1}.gif")
+                write_gif(frame_buffer, out_file)
+
             elap = round((time.time() - st)/60, 2)
 
             if ((e_idx+1) % checkpoint_interval) == 0:
@@ -273,7 +294,7 @@ def main():
     param_study = json_params.pop('param_study', {})
     exp_params = ExperimentParams(**json_params)
 
-    render_mode = "human" if cli_args.render else None
+    render_mode = "human" if cli_args.render else 'rgb_array'
     env = gym.make('MountainCar-v0', render_mode=render_mode)
     n_actions = env.action_space.n
 
@@ -299,14 +320,16 @@ def main():
         import ipdb; ipdb.set_trace()
 
     if cli_args.forensic:
-        net = torch.load(cli_args.forensic).to(device)
         agent = factory.get(
             exp_params.agent_params,
             exp_params.train_params,
         )
-        agent.net = net
-        q_vals = agent.evaluate_q(show_v=True)
-        plot_q_deltas(q_vals)
+        # net = torch.load(cli_args.forensic).to(device)
+        agent.load(cli_args.forensic)
+        agent.visualize()
+        # agent.net = net
+        # q_vals = agent.evaluate_q(show_v=True)
+        # plot_q_deltas(q_vals)
         import ipdb; ipdb.set_trace()
 
 

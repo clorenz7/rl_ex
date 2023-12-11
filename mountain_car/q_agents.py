@@ -93,7 +93,7 @@ class TorchQAgentBase:
 
         return self.last_action
 
-    def evaluate_q(self, show_v=True):
+    def evaluate_q(self):
         n_mesh = 100
         x = torch.linspace(
             self.min_vals[0] + 1e-3,
@@ -105,27 +105,19 @@ class TorchQAgentBase:
             self.max_vals[1] - 1e-3,
             n_mesh
         )
-        grid_x, grid_y = torch.meshgrid(x, y)
+        grid_x, grid_y = torch.meshgrid(x, y, indexing="ij")
         grid_xf, grid_yf = grid_x.flatten(), grid_y.flatten()
         features = []
         for state in zip(grid_xf, grid_yf):
             features.append(self.state_to_features(state))
 
-        features = torch.vstack(features)
+        features = torch.vstack(features).to(self.device)
 
         with torch.no_grad():
             q_vals = self.net(features)
         q_vals = q_vals.reshape([n_mesh, n_mesh, 3]).detach().cpu().numpy()
-        if show_v:
-            time_to_go = -np.max(q_vals, axis=2)
-            fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-            ax.plot_surface(grid_x, grid_y, time_to_go);
-            ax.set_xlabel("Position")
-            ax.set_ylabel("Velocity")
-            ax.set_zlabel("-V(s): steps to goal")
-            plt.show()
 
-        return q_vals
+        return q_vals, grid_x.numpy(), grid_y.numpy()
 
     def state_to_features(self, state):
         features = (
@@ -204,6 +196,36 @@ class TorchQAgentBase:
 
     def checkpoint(self, file_name):
         torch.save(self.net, file_name)
+
+    def load(self, file_path):
+        self.net = torch.load(file_path).to(self.device)
+
+    def visualize(self):
+
+        q_vals, grid_x, grid_y = self.evaluate_q()
+
+        # plt.figure(1)
+        time_to_go = -np.max(q_vals, axis=2)
+        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        ax.plot_surface(grid_x, grid_y, time_to_go);
+        ax.set_xlabel("Position")
+        ax.set_ylabel("Velocity")
+        ax.set_zlabel("-V(s): steps to goal")
+
+        plt.figure(2)
+        tick_idx = np.linspace(1, grid_x.shape[0], 6, dtype=int) - 1
+        x_ticks = np.round(grid_x[tick_idx, 0], 1);
+        y_ticks = np.round(grid_y[0, tick_idx], 2);
+        plt.imshow(np.argmax(q_vals, axis=2).T);
+        plt.yticks(tick_idx, y_ticks);
+        plt.xticks(tick_idx, x_ticks);
+        plt.xlabel('Position');
+        plt.ylabel('Velocity');
+        plt.colorbar();
+        plt.title("$\pi(s)$");
+        plt.show()
+
+        import ipdb; ipdb.set_trace()
 
 
 class TiledLinearQAgent(TorchQAgentBase):
