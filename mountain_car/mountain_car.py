@@ -386,7 +386,7 @@ def main():
             exp_params.train_params,
         )
         run_steps = experiment_loop(
-            env, agent, cli_args.out_dir, render=render_mode,
+            env, agent, cli_args.out_dir,
             **exp_params.simulation_params
         )
 
