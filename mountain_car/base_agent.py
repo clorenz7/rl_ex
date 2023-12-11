@@ -1,6 +1,7 @@
 
 import torch
 
+
 class BaseAgent:
 
     def get_grid(self):

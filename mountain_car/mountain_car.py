@@ -359,7 +359,6 @@ def main():
                 run_steps = experiment_loop(
                     env, agent,
                     out_dir=os.path.join(cli_args.out_dir, f"sweep{i}_{j}"),
-                    render=render_mode,
                     **exp_params.simulation_params
                 )
                 avg_steps = np.mean(run_steps, axis=1)
