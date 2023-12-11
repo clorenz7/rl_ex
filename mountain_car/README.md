@@ -96,17 +96,30 @@ For the Actor-Critic algorithm, I again used semi-gradient single step updates w
 | activation         | ELU   |    ELU |
 
 
-The results are much improved and were easier to obtain:
+The results are much improved and the hyperparameters were easier to obtain:
 
 ![ac_results](./assets/mc_ac_sep_dec06_2023_Dec_06_08_45.png)
 
 The variance on the models as they are training is a bit concerning. If I were deploying this algorithm, I would investigate other values for learning rate and weight decay and the model architectures to attempt to reduce those spikes.
 
 
-The learned policy:
+Here is the learned policy, which makes sense, as it accelerates left when it has negative momentum in order to get up the left ramp to gain potential energy, and then accelerates to the right when it has positive momentum.
 
-The learned value estimate:
+![ac_policy](./assets/ac_run_0_ep80_policy.png)
 
+The learned value estimate below may explain some of this issue, as a discount factor $\gamma=0.9$ was used. This leaves a maximum value of $\frac{1}{1-\gamma} = 10$ as seem in the plot. This may make it hard for the algorithm to bootstrap better actions near the starting point.
+
+![ac_V](./assets/ac_run_0_ep80_state_val.png)
+
+We can in fact observe this behavior comparing the long running episode 60 which struggles early:
+
+![ac_run60](./assets/ac_dec11_gam90_ep60.gif)
+
+With the much shorter episode 62 which takes advantage of its starting point:
+
+![ac_run62](./assets/ac_dec11_gam90_ep62.gif)
+
+### Updated Discount Factor
 
 
 

@@ -1,4 +1,5 @@
 gymnasium==0.29.1
+imageio==2.33.1
 ipdb==0.13.13
 joblib==1.3.2
 matplotlib==3.8.2
