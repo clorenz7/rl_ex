@@ -107,11 +107,11 @@ Here is the learned policy, which makes sense, as it accelerates left when it ha
 
 ![ac_policy](./assets/ac_run_0_ep80_policy.png)
 
-The learned value estimate below may explain some of this issue, as a discount factor $\gamma=0.9$ was used. This leaves a maximum value of $\frac{1}{1-\gamma} = 10$ as seem in the plot. This may make it hard for the algorithm to bootstrap better actions near the starting point.
+The learned value estimate below may explain some of this issue, as a discount factor $\gamma=0.9$ was used. This leaves a maximum value of $\frac{-1}{1-\gamma} = -10$ as seem in the plot. This may make it hard for the algorithm to bootstrap better actions near the starting point.
 
 ![ac_V](./assets/ac_run_0_ep80_state_val.png)
 
-We can in fact observe this behavior comparing the long running episode 60 which struggles early:
+We can in fact observe this behavior comparing the long running episode 60 which struggles early (likely due to action saturating the expected value at -10):
 
 ![ac_run60](./assets/ac_dec11_gam90_ep60.gif)
 
@@ -121,6 +121,20 @@ With the much shorter episode 62 which takes advantage of its starting point:
 
 ### Updated Discount Factor
 
+Setting $\gamma = 0.99$ to attempt to match the expected value of $V(s)$ led to more variance. $\gamma = 0.999$ was highly divergent.
+
+![ac_gamma99](./assets/mc_ac_sep_dec11_gam_2023_Dec_11_11_28.png)
+
+Setting $\gamma = 0.95$ reduced the variance slightly with respect to $\gamma = 0.9$. Tuning $\gamma$ feels unprincipled, and was mentioned in my class as a motivation for using the average return formulation.
+
+![ac_gamma95](./assets/mc_ac_sep_dec11_gam_2_2023_Dec_11_11_50.png)
+
+Here are the policy and value functions for a single run at episode 120 which have more structure than $\gamma=0.9$:
+
+![ac_V2](./assets/V_ac_dec11_gam2_run0_ep120.png)
+
+![ac_policy2](./assets/policy_ac_dec11_gam2_run0_ep120.png)
 
 
+This motivates me to implement Asynchronous Advantage Actor Critic (A2C / A3C)! (Asynchronous multiple agents doing batch updates will also help with learning stability I bet) And preferably on a new problem. I may be legally obligated to change my name to Kate Bush after running up that hill so many times! ;P
 

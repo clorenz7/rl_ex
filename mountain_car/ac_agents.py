@@ -81,17 +81,6 @@ class MountainCarActorCriticAgent(BaseAgent):
 
         self.reset()
 
-    def bound(self, state, eps=1e-4):
-        for i in range(len(state)):
-            state[i] = max(
-                min(state[i], self.max_vals[i]-eps),
-                self.min_vals[i] + eps
-            )
-        return state
-
-    # def state_to_features(self, state):
-    #     return torch.from_numpy(state).float().to(self.device)
-
     def get_action_and_value(self, state=None, features=None):
         if state is not None:
             features = self.state_to_features(state)
