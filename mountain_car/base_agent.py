@@ -79,20 +79,20 @@ activation_factory = ActivationFactory()
 
 def net_from_layer_sizes(layer_sizes, activation=nn.ELU, final_activation=None):
 
-    if isinstance(activation, str):
-        activation = activation_factory.get(activation)
-
-    if isinstance(final_activation, str):
-        final_activation = activation_factory.get(final_activation)
-
     layers = []
     for ii in range(len(layer_sizes)-1):
         layers.append(nn.Linear(layer_sizes[ii], layer_sizes[ii+1]))
-        layers.append(activation())
+        if isinstance(activation, str):
+            layers.append(activation_factory.get(activation))
+        else:
+            layers.append(activation())
 
     # Remove final activation and re-add it
     layers.pop()
     if final_activation is not None:
-        layers.append(final_activation())
+        if isinstance(final_activation, str):
+            layers.append(activation_factory.get(final_activation))
+        else:
+            layers.append(final_activation())
 
     return nn.Sequential(*layers)

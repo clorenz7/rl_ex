@@ -7,7 +7,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from base_agent import BaseAgent, activation_factory
+from base_agent import BaseAgent, net_from_layer_sizes
 import sutton_tiles
 
 
@@ -260,27 +260,15 @@ class FFWQAgent(TorchQAgentBase):
             self.n_layers = agent_params.get('n_layers', 3)
             self.n_hidden = [n_hidden] * self.n_layers
 
+        self.layer_sizes = [self.n_state] + self.n_hidden + [self.n_actions]
         self.activation_name = agent_params.get('activation', 'elu')
 
         self.reset()
 
     def reset(self):
-        layers = []
-        last_out = self.n_state
-        for ii in range(self.n_layers):
-            is_not_last = ii != self.n_layers-1
-            next_out = self.n_hidden[ii] if is_not_last else self.n_actions
-            layers.append(
-                nn.Linear(last_out, next_out, bias=True)
-            )
-            if is_not_last:
-                layers.append(
-                    activation_factory.get(self.activation_name)
-                )
-            last_out = next_out
 
-        self.net = nn.Sequential(
-            *layers
+        self.net = net_from_layer_sizes(
+            self.layer_sizes, activation=self.activation_name
         ).to(self.device)
 
         self.set_optimizer()
