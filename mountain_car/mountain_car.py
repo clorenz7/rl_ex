@@ -25,7 +25,6 @@ import ac_agents
 DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "rl_results")
 
 
-
 def write_gif(frames, output_path):
     with imageio.get_writer(output_path, mode='I', duration=0.03) as writer:
         for frame in frames:
@@ -33,6 +32,19 @@ def write_gif(frames, output_path):
             writer.append_data(frame)
 
     print(f"GIF created and saved at {output_path}")
+
+
+def get_device(no_gpu=False):
+    device = torch.device("cpu")
+    if not no_gpu:
+        if torch.backends.mps.is_available():
+            print("Accelerating with MPS!")
+            device = torch.device("mps")
+        elif torch.cuda.is_available():
+            print("Accelerating with CUDA!")
+            device = torch.device("cuda")
+
+    return device
 
 
 def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
@@ -244,6 +256,7 @@ def plot_q_deltas(q_vals):
 
     plt.show()
 
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -274,11 +287,12 @@ def main():
         help="Render the details of a sweep CSV of indexes"
     )
 
+    # Get command line parameters and setup output directory
     cli_args = parser.parse_args()
     date_time = datetime.datetime.now().strftime('%Y_%b_%d_%H_%M')
-
     os.makedirs(cli_args.out_dir, exist_ok=True)
 
+    # Parse and prepare experiment parameters
     if cli_args.json:
         with open(cli_args.json, 'r') as fp:
             json_params = json.load(fp)
@@ -298,51 +312,44 @@ def main():
     param_study = json_params.pop('param_study', {})
     exp_params = ExperimentParams(**json_params)
 
+    # Setup the environment
     render_mode = "human" if cli_args.render else 'rgb_array'
     env = gym.make('MountainCar-v0', render_mode=render_mode)
     n_actions = env.action_space.n
 
-    device = torch.device("cpu")
-    if not cli_args.no_gpu:
-        if torch.backends.mps.is_available():
-            print("Accelerating with MPS!")
-            device = torch.device("mps")
-        elif torch.cuda.is_available():
-            print("Accelerating with CUDA!")
-            device = torch.device("cuda")
-
+    # Setup the agent
+    device = get_device(no_gpu=cli_args.no_gpu)
     factory = AgentFactory(agent_type, n_actions, device=device)
 
+    # Get details on a previous parameter study if desired
     if cli_args.details:
+
         sweep_data = joblib.load(cli_args.forensic)
-
         i, j = [int(i) for i in cli_args.details.split(",")]
-
         run_steps = sweep_data['all_episodes'][i, j, :, :]
 
         plot_single_experiment_result(run_steps, add_legend=True)
-        import ipdb; ipdb.set_trace()
 
-    if cli_args.forensic:
+    # Do a forensic analysis of a run if desired
+    elif cli_args.forensic:
         agent = factory.get(
             exp_params.agent_params,
             exp_params.train_params,
         )
         agent.load(cli_args.forensic)
+        # Visualize the policy and/or value function
         agent.visualize()
         if cli_args.out_dir:
+            # Run one time to output a GIF or something
             run_steps = experiment_loop(
                 env, agent, cli_args.out_dir,
                 **exp_params.simulation_params
             )
             # Visualize again to check policy stability
             agent.visualize()
-        import ipdb; ipdb.set_trace()
-        import sys
-        sys.exit(0)
 
-
-    if param_study:
+    # Run a parameter study if desired
+    elif param_study:
         param_keys = [k for k in param_study.keys()]
         n_vals = [len(v) for v in param_study.values()]
         # Limit to first two dimensions for now
@@ -389,7 +396,7 @@ def main():
 
         plot_parameter_study(result, save_base=save_base)
     else:
-        # Just a single evaluation
+        # Just run a single evaluation
         agent = factory.get(
             exp_params.agent_params,
             exp_params.train_params,
@@ -403,8 +410,8 @@ def main():
         save_loc = os.path.join(cli_args.out_dir, f"{descrip}_{date_time}.png")
         plot_single_experiment_result(run_steps, save_loc=save_loc)
 
+    # Final debug for developer analysis
     import ipdb; ipdb.set_trace()
-
 
 if __name__ == "__main__":
     main()

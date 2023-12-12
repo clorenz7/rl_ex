@@ -7,53 +7,24 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from base_agent import BaseAgent, activation_factory
 import sutton_tiles
 
-MIN_VALS = [-1.2, -0.07]
-MAX_VALS = [0.6, 0.07]
 
-
-class ActivationFactory:
-    _MAP = {
-        'relu': nn.ReLU,
-        'relu6': nn.ReLU6,
-        'elu': nn.ELU,
-        'hardtanh': nn.Hardtanh,
-        'tanh': nn.Tanh,
-        'sigmoid': nn.Sigmoid,
-        'hardsigmoid': nn.Hardsigmoid,
-    }
-
-    def get(self, activation_name):
-        return self._MAP[activation_name.lower()]()
-
-
-activation_factory = ActivationFactory()
-
-
-class TorchQAgentBase:
+class TorchQAgentBase(BaseAgent):
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="",
                  n_state=2):
+        super().__init__(agent_params)
         self.n_actions = n_actions
         self.n_state = n_state
         self.last_state = None
         self.last_action = None
 
-        self.agent_params = agent_params or {}
         self.train_params = train_params or {}
 
+        # This is for backwards compatibilty
         self.gamma = self.agent_params.get('gamma', 1.0)
-        self.epsilon = self.agent_params.get('epsilon', 1e-8)
-        self.min_vals = self.agent_params.get('min_vals', MIN_VALS)
-        self.max_vals = self.agent_params.get('max_vals', MAX_VALS)
-        self.use_smooth_l1_loss = self.agent_params.get('use_smooth_l1_loss', False)
-        self.mu = (
-            torch.tensor(self.max_vals) + torch.tensor(self.min_vals)
-        ) / 2.0
-        self.sigma = (
-            torch.tensor(self.max_vals) - torch.tensor(self.min_vals)
-        ) / 2.0
 
         self.train_params = train_params
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
@@ -62,14 +33,6 @@ class TorchQAgentBase:
             self.train_params['lr'] = alpha
 
         self.device = device or "cpu"
-
-    def bound(self, state, eps=1e-4):
-        for i in range(len(state)):
-            state[i] = max(
-                min(state[i], self.max_vals[i]-eps),
-                self.min_vals[i] + eps
-            )
-        return state
 
     def select_action(self, state=None, features=None):
         if state is not None:
@@ -93,38 +56,30 @@ class TorchQAgentBase:
 
         return self.last_action
 
+    def set_optimizer(self):
+        if self.optimizer_name == "adam":
+            self.optimizer = torch.optim.AdamW(
+                self.net.parameters(),
+                **self.train_params
+            )
+        else:
+            self.optimizer = torch.optim.SGD(
+                self.net.parameters(),
+                **self.train_params
+            )
+
     def evaluate_q(self):
         n_mesh = 100
-        x = torch.linspace(
-            self.min_vals[0] + 1e-3,
-            self.max_vals[0] - 1e-3,
-            n_mesh
-        )
-        y = torch.linspace(
-            self.min_vals[1] + 1e-3,
-            self.max_vals[1] - 1e-3,
-            n_mesh
-        )
-        grid_x, grid_y = torch.meshgrid(x, y, indexing="ij")
-        grid_xf, grid_yf = grid_x.flatten(), grid_y.flatten()
-        features = []
-        for state in zip(grid_xf, grid_yf):
-            features.append(self.state_to_features(state))
-
-        features = torch.vstack(features).to(self.device)
+        features, grid_x, grid_y = self.get_grid(n_mesh)
 
         with torch.no_grad():
             q_vals = self.net(features)
         q_vals = q_vals.reshape([n_mesh, n_mesh, 3]).detach().cpu().numpy()
 
-        return q_vals, grid_x.numpy(), grid_y.numpy()
+        return q_vals, grid_x, grid_y
 
     def state_to_features(self, state):
-        features = (
-            (torch.tensor(state) - self.mu)/self.sigma
-        ).to(self.device)
-
-        return features
+        return self.normalize_state(state)
 
     def step(self, reward, state, debug=False):
         if debug:
@@ -199,12 +154,12 @@ class TorchQAgentBase:
 
     def load(self, file_path):
         self.net = torch.load(file_path).to(self.device)
+        self.set_optimizer()
 
     def visualize(self):
 
         q_vals, grid_x, grid_y = self.evaluate_q()
 
-        # plt.figure(1)
         time_to_go = -np.max(q_vals, axis=2)
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         ax.plot_surface(grid_x, grid_y, time_to_go);
@@ -224,8 +179,6 @@ class TorchQAgentBase:
         plt.colorbar();
         plt.title("$\pi(s)$");
         plt.show()
-
-        import ipdb; ipdb.set_trace()
 
 
 class TiledLinearQAgent(TorchQAgentBase):
@@ -263,12 +216,7 @@ class TiledLinearQAgent(TorchQAgentBase):
         ).to(self.device)
         self.net.weight.data = self.net.weight.data/1000
 
-        self.optimizer = torch.optim.SGD(
-            self.net.parameters(),
-            momentum=0.0,
-            weight_decay=0.0,
-            lr=self.train_params['lr']/2.0
-        )
+        self.set_optimizer()
 
 
 class TiledLinearQAgentSutton(TiledLinearQAgent):
@@ -335,13 +283,4 @@ class FFWQAgent(TorchQAgentBase):
             *layers
         ).to(self.device)
 
-        if self.optimizer_name == "adam":
-            self.optimizer = torch.optim.AdamW(
-                self.net.parameters(),
-                **self.train_params
-            )
-        else:
-            self.optimizer = torch.optim.SGD(
-                self.net.parameters(),
-                **self.train_params
-            )
+        self.set_optimizer()
