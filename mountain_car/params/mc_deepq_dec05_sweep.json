@@ -1,0 +1,24 @@
+{
+    "agent_type": "deepq",
+    "agent_params": {
+        "n_hidden": [512, 512],
+        "epsilon": 1e-6,
+        "use_smooth_l1_loss": true,
+        "activation": "elu"
+    },
+    "train_params": {
+        "optimizer": "adam",
+        "lr": 2e-6,
+        "weight_decay": 0
+    },
+    "simulation_params": {
+        "n_runs": 10,
+        "n_episodes": 100,
+        "max_steps": [5000, 5000],
+        "checkpoint_interval": 10
+    },
+    "param_study": {
+        "train_params.lr": [2e-6, 4e-6, 8e-6],
+        "train_params.weight_decay": [1e-4, 1e-3, 1e-2]
+    }
+}

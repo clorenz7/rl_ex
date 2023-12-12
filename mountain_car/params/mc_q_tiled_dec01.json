@@ -1,0 +1,17 @@
+{
+    "agent_type":  "qtiles",
+    "agent_params": {
+        "n_tiles": 8,
+        "n_grid": 8,
+        "epsilon": 1e-5,
+        "gamma": 1.0
+    },
+    "train_params": {
+        "alpha": 1.25e-2
+    },
+    "simulation_params": {
+        "n_runs": 8,
+        "n_episodes": 100,
+        "max_steps": [16000, 5000]
+    }
+}

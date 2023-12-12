@@ -1,0 +1,21 @@
+{
+    "agent_type": "actor-critic",
+    "agent_params": {
+        "actor_layers": [48, 48],
+        "critic_layers": [384, 384],
+        "gamma": 0.95,
+        "single_grad": true
+    },
+    "train_params": {
+        "optimizer": "adam",
+        "critic": {"lr": 4e-4},
+        "actor":  {"lr": 2e-4}
+    },
+    "simulation_params": {
+        "n_runs": 10,
+        "n_episodes": 150,
+        "max_steps": [10000, 5000],
+        "checkpoint_interval": 10,
+        "output_gif": false
+    }
+}
