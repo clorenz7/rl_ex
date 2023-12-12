@@ -4,7 +4,8 @@
         "n_hidden": [512, 512],
         "epsilon": 1e-6,
         "use_smooth_l1_loss": true,
-        "activation": "elu"
+        "activation": "elu",
+        "output_gif": true
     },
     "train_params": {
         "optimizer": "adam",
