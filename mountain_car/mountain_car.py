@@ -1,6 +1,5 @@
 """
-Mountain car
-- Initial version is tile coding with linear function approx.
+Mountain car experiment runner
 """
 import argparse
 from copy import deepcopy
@@ -34,9 +33,9 @@ def write_gif(frames, output_path):
     print(f"GIF created and saved at {output_path}")
 
 
-def get_device(no_gpu=False):
+def get_device(use_gpu=False):
     device = torch.device("cpu")
-    if not no_gpu:
+    if use_gpu:
         if torch.backends.mps.is_available():
             print("Accelerating with MPS!")
             device = torch.device("mps")
@@ -90,10 +89,6 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
                 if s_idx >= step_limit[e_idx]:
                     final_state = "aborted"
                     elap = round((time.time() - st)/60, 2)
-                    # print(f"Break at {s_idx} after {elap}min")
-                    # agent.evaluate_q()
-                    # np_traj = np.vstack(trajectory).T
-                    # import ipdb; ipdb.set_trace()
                     break
             if terminated:
                 final_state = "reached goal"
@@ -107,7 +102,7 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
 
             if ((e_idx+1) % checkpoint_interval) == 0:
                 agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx+1}.chkpt.pt"))
-            # agent.evaluate_q()
+
             # Record result and display if desired
             run_steps[e_idx, r_idx] = s_idx
             if verbose or (e_idx + 1) % 100 == 0:
@@ -120,7 +115,6 @@ def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
         agent.checkpoint(os.path.join(out_dir, f"run{r_idx}_ep{e_idx+1}.chkpt.pt"))
 
         agent.reset()
-
 
     return run_steps
 
@@ -268,11 +262,11 @@ def main():
     )
     parser.add_argument(
         '-r', "--render", action="store_true",
-        help="Render the agent in the environment"
+        help="Render the agent in the environment as it learns"
     )
     parser.add_argument(
-        '-g', "--no_gpu", action="store_true",
-        help="Turn off GPU acceleration"
+        '-g', "--use_gpu", action="store_true",
+        help="Turn on GPU acceleration. (Not good for single step algos)"
     )
     parser.add_argument(
         '-o', '--out_dir', default=DEFAULT_DIR,
@@ -284,7 +278,7 @@ def main():
     )
     parser.add_argument(
         '-d', "--details", type=str,
-        help="Render the details of a sweep CSV of indexes"
+        help="Render the details of a sweep: comma separated indexes"
     )
 
     # Get command line parameters and setup output directory
@@ -318,7 +312,7 @@ def main():
     n_actions = env.action_space.n
 
     # Setup the agent
-    device = get_device(no_gpu=cli_args.no_gpu)
+    device = get_device(cli_args.use_gpu)
     factory = AgentFactory(agent_type, n_actions, device=device)
 
     # Get details on a previous parameter study if desired
@@ -412,6 +406,7 @@ def main():
 
     # Final debug for developer analysis
     import ipdb; ipdb.set_trace()
+
 
 if __name__ == "__main__":
     main()

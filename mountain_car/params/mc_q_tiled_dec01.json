@@ -7,7 +7,8 @@
         "gamma": 1.0
     },
     "train_params": {
-        "alpha": 1.25e-2
+        "alpha": 0.625e-2,
+        "optimizer": "sgd"
     },
     "simulation_params": {
         "n_runs": 8,

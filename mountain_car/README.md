@@ -17,6 +17,7 @@ I decided to try the following algorithms:
 2. Q-learning with a deeper neural net and the raw state values
 3. Policy gradient with Actor-Critic
 
+
 # Results
 
 ## Q-learning with Tile coding
@@ -140,4 +141,15 @@ Here are the policy and value functions for a single run at episode 120 which ha
 
 
 This issue with the discount factor $\gamma$ motivates me to implement Asynchronous Advantage Actor Critic (A2C / A3C)! (Asynchronous multiple agents doing batch updates will also help with learning stability I bet) And preferably on a new problem. I may be legally obligated to change my name to Kate Bush after running up that hill so many times! ;P
+
+# Reproducability
+
+`mountain_car.py` is the script that runs the training and evaluation. Experiment parameters (hyperparameters, architecture, etc) are all controlled by json files, which can be found in the `params` directory.
+
+To reproduce the first example of tiled Q learning, you can simply run:
+
+```bash
+python mountain_car.py --json params/mc_q_tiled_dec01.json
+```
+
 

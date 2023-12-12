@@ -14,3 +14,6 @@ My ambitions are to work my way through A3C and PPO papers on simple problems, t
 1. [Mountain Car: Q-learning and Actor-Critic](./mountain_car/)
 
 
+## Setup
+
+Please run `pip install -r requirements.txt` after you have setup your virtualenv or Conda.
