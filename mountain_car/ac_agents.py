@@ -7,7 +7,7 @@ from torch import nn
 from torch.distributions import Categorical
 import torch.nn.functional as F
 
-from base_agent import BaseAgent, net_from_layer_sizes
+from base import BaseAgent, net_from_layer_sizes
 
 
 class PolicyValueNetwork(nn.Module):

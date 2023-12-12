@@ -7,7 +7,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
-from base_agent import BaseAgent, net_from_layer_sizes
+from base import BaseAgent, net_from_layer_sizes
 import sutton_tiles
 
 
