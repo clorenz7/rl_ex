@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from base_agent import BaseAgent, net_from_layer_sizes
 
 
-class Policy(nn.Module):
+class PolicyValueNetwork(nn.Module):
 
     def __init__(self, n_actions, n_hidden, n_state=2):
         super().__init__()
