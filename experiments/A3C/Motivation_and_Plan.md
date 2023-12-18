@@ -10,7 +10,7 @@ The basic changes to the Actor-Critic Algorithm (and their benefits) are:
 
     $$A = \sum_{i=0}^{k-1} \gamma^ir_{t+i} + \gamma^kV(s_{t+k}) - V(s_t) \text{ for }(k \leq t_{max})$$
 
-2. The use of multiple independent copies of the agent-environment interaction with differing exploration policies
+2. The use of multiple independent copies of the agent-environment interaction with (optionally) differing exploration policies
     - Utilize multiple CPUs
     - Provides a more accurate sampling of the state-space in each batch
 3. The use of batch updates / gradient accumulation from the multiple agents
@@ -29,12 +29,12 @@ The basic changes to the Actor-Critic Algorithm (and their benefits) are:
 2. Convolutional layer with with 32 filters of size 4 × 4 with stride 2; rectifier nonlinearity
 3. Fully connected layer with 256 hidden units; rectifier nonlinearity
 4. Two output layers from shared base:
-    1. a softmax output with one entry per action representing the probability of selecting the action
-    2. a single linear output representing the value function.
+    1. A softmax output with one entry per action representing the probability of selecting the action
+    2. A single linear output representing the value function.
 
-#### Training & Hyper Parameters
+#### Training & Evaluation
 
-Mostly Followed Van Hasselt 2015.
+Mostly Followed Van Hasselt / Mnih 2015.
 
 - Tuned learning rate and gradient clipping on 6 games.
 - Paper suggests a learning rate of $10^{-3}$
@@ -48,6 +48,8 @@ Mostly Followed Van Hasselt 2015.
 | $t_{max}$                | 5     |
 | Action repeat            | 4     |
 
+
+Evaluation: "The trained agents were evaluated by playing each game 30 times for up to 5 min each time with different initial random conditions"
 
 #### Preprocessing (Mnih 2015)
 
@@ -69,9 +71,21 @@ Mostly Followed Van Hasselt 2015.
 
 ### Goals
 
-1. Reproduce the Space Invader learning rate plot in Figure 2 with RMSProp, and then re-do it with Adam
+1. Reproduce the Space Invader learning rate plot in Figure 2 with RMSProp, and then re-do it with Adam.
+
+<div style="text-align:center"><img src="./assets/goal1.png" /></div>
+
 2. Reproduce the training curve for Space Invaders in the lower right corner of Figure 3 for X threads with X > 1. For both RMSProp and Adam.
-3. Reproduce (or exceed) the score achieved in Table S3 for The A3C LSTM on Breakout and Space Invaders.
+
+<div style="text-align:center"><img src="./assets/goal2.png" /></div>
+
+3. Reproduce the score achieved in Table S3 for The A3C LSTM on Breakout and Space Invaders.
+
+| Game           | A3C FF  | A3C LSTM |
+| ---------------| --------| ---------|
+| Breakout       | 681.9   | 766.8    |
+| Space Invaders | 15730.5 | 23846.0  |
+
 
 ### Milestones
 
