@@ -26,9 +26,6 @@ import ac_agents
 DEFAULT_DIR = os.path.join(os.path.expanduser("~"), "rl_results")
 
 
-
-
-
 def experiment_loop(env, agent, out_dir, seed=101, n_runs=100, n_episodes=500,
                     eval_episodes={}, max_steps=[10000, 10000], verbose=True,
                     checkpoint_interval=None, output_gif=False):
