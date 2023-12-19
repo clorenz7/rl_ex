@@ -17,3 +17,13 @@ My ambitions are to work my way through A3C and PPO papers on simple problems, t
 ## Setup
 
 Run `pip install -r requirements.txt` after you have setup your virtualenv or Conda.
+
+It is reccomended to add the code root directory (or at least `.`) to the PYTHONPATH of your virtualenv by modifying the source/bin/activate script:
+
+`export PYTHONPATH=.`
+
+Or
+
+`export PYTHONPATH=~/code/rl_ex`
+
+
