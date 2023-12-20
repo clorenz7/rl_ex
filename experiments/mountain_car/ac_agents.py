@@ -10,30 +10,6 @@ import torch.nn.functional as F
 from base import BaseAgent, net_from_layer_sizes
 
 
-class PolicyValueNetwork(nn.Module):
-
-    def __init__(self, n_actions, n_hidden, n_state=2):
-        super().__init__()
-        self.base_layer = nn.Sequential(
-            nn.Linear(n_state, n_hidden),
-            nn.ReLU(),
-        )
-
-        self.policy_head = nn.Linear(n_hidden, n_actions)
-        self.value_head = nn.Linear(n_hidden, 1)
-
-    def forward(self, x):
-        x = self.base_layer(x)
-
-        logits = self.policy_head(x)
-
-        action_probs = F.softmax(logits, dim=-1)
-
-        value_est = self.value_head(x)
-
-        return action_probs, value_est
-
-
 class MountainCarActorCriticAgent(BaseAgent):
 
     def __init__(self, n_actions, agent_params={}, train_params={}, device="cpu"):

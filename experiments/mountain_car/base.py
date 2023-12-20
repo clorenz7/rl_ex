@@ -59,40 +59,43 @@ class BaseAgent:
         return features
 
 
-class ActivationFactory:
-    _MAP = {
-        'relu': nn.ReLU,
-        'relu6': nn.ReLU6,
-        'elu': nn.ELU,
-        'hardtanh': nn.Hardtanh,
-        'tanh': nn.Tanh,
-        'sigmoid': nn.Sigmoid,
-        'hardsigmoid': nn.Hardsigmoid,
-    }
+# from cor_rl.factories import activation_factory
+from cor_rl.factories import ffw_factory as net_from_layer_sizes
 
-    def get(self, activation_name):
-        return self._MAP[activation_name.lower()]()
+# class ActivationFactory:
+#     _MAP = {
+#         'relu': nn.ReLU,
+#         'relu6': nn.ReLU6,
+#         'elu': nn.ELU,
+#         'hardtanh': nn.Hardtanh,
+#         'tanh': nn.Tanh,
+#         'sigmoid': nn.Sigmoid,
+#         'hardsigmoid': nn.Hardsigmoid,
+#     }
+
+#     def get(self, activation_name):
+#         return self._MAP[activation_name.lower()]()
 
 
-activation_factory = ActivationFactory()
+# activation_factory = ActivationFactory()
 
 
-def net_from_layer_sizes(layer_sizes, activation=nn.ELU, final_activation=None):
+# def net_from_layer_sizes(layer_sizes, activation=nn.ELU, final_activation=None):
 
-    layers = []
-    for ii in range(len(layer_sizes)-1):
-        layers.append(nn.Linear(layer_sizes[ii], layer_sizes[ii+1]))
-        if isinstance(activation, str):
-            layers.append(activation_factory.get(activation))
-        else:
-            layers.append(activation())
+#     layers = []
+#     for ii in range(len(layer_sizes)-1):
+#         layers.append(nn.Linear(layer_sizes[ii], layer_sizes[ii+1]))
+#         if isinstance(activation, str):
+#             layers.append(activation_factory.get(activation))
+#         else:
+#             layers.append(activation())
 
-    # Remove final activation and re-add it
-    layers.pop()
-    if final_activation is not None:
-        if isinstance(final_activation, str):
-            layers.append(activation_factory.get(final_activation))
-        else:
-            layers.append(final_activation())
+#     # Remove final activation and re-add it
+#     layers.pop()
+#     if final_activation is not None:
+#         if isinstance(final_activation, str):
+#             layers.append(activation_factory.get(final_activation))
+#         else:
+#             layers.append(final_activation())
 
-    return nn.Sequential(*layers)
+#     return nn.Sequential(*layers)
