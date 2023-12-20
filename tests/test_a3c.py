@@ -14,7 +14,7 @@ def test_n_step_returns():
     assert n_step_returns == [12, 20, 32, 48, 64]
 
 
-def test_cart_pole():
+def test_cart_pole_eval():
     render_mode = "human" if True else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
     agent_params = {
@@ -30,3 +30,24 @@ def test_cart_pole():
     result = a3c.agent_env_task(agent, env, parameters=None, state=None)
 
     import ipdb; ipdb.set_trace()
+
+
+def test_cart_pole_train():
+    render_mode = "human" if True else 'rgb_array'
+    env = gym.make('CartPole-v1', render_mode=render_mode)
+    agent_params = {
+        'hidden_sizes': [128],
+        # 'hidden_sizes': [24, 24],
+        'n_actions': 2,
+        'n_state': 4,
+        'gamma': 0.99,
+        'entropy_weight': 0.01
+    }
+    train_params = {
+        'optimizer': 'adam',
+        'lr': 1e-3,
+    }
+    global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+    agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
+
+    a3c.train_loop(global_agent, agents, [env], step_limit=1e9, episode_limit=2000)

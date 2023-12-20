@@ -274,11 +274,18 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.optimizer.zero_grad()
 
     def update(self, state_dict):
-        self.load_state_dict(state_dict)
+        self.net.load_state_dict(state_dict)
+
+    def get_parameters(self):
+        return self.net.state_dict()
 
     def set_grads(self, grads):
         for name, param in self.net.named_parameters():
             param.grad = grads[name]
+
+    def backward(self):
+        self.optimizer.step()
+        # TODO: Add learning rate scheduler
 
 
 def interact(env, agent, t_max=5, state=None, output_gif=False):
@@ -343,7 +350,7 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
     return results, state, terminated, frame_buffer
 
 
-def agent_env_task(agent, env, parameters, state):
+def agent_env_task(agent, env, parameters, state, t_max=5):
 
     if parameters is not None:
         agent.update(parameters)
@@ -351,7 +358,7 @@ def agent_env_task(agent, env, parameters, state):
     agent.zero_grad()
 
     results, state, terminated, _ = interact(
-        env, agent, t_max=25, state=state
+        env, agent, t_max=t_max, state=state
     )
 
     # This will run back prop
@@ -361,7 +368,37 @@ def agent_env_task(agent, env, parameters, state):
         'grads': grads,
         'state': state,
         'terminated': terminated,
+        'n_steps': len(results.rewards),
     }
+
+
+def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None):
+
+    total_steps = 0
+    total_episodes = 0
+    ep_steps = 0
+    n_threads = len(agents)
+    states = [None] * n_threads
+
+    while total_steps < step_limit and total_episodes < episode_limit:
+        params = global_agent.get_parameters()
+        for t_idx in range(n_threads):
+            agent = agents[t_idx]
+            task_result = agent_env_task(
+                agent, envs[t_idx], params, states[t_idx], t_max=100
+            )
+            n_steps = task_result['n_steps']
+            ep_steps += n_steps
+            total_steps += n_steps
+            states[t_idx] = task_result['state']
+            if states[t_idx] is None:
+                total_episodes += 1
+                print(f"Episode {total_episodes} Terminated after {ep_steps} steps. Total steps: {total_steps}")
+                ep_steps = 0
+            global_agent.set_grads(task_result['grads'])
+            global_agent.backward()
+
+
 
 
 
