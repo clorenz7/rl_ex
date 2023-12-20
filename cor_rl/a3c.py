@@ -10,7 +10,7 @@ from cor_rl.factories import ffw_factory
 
 InteractionResult = namedtuple(
     'InteractionResult',
-    ['rewards', 'values', 'policies'],
+    ['rewards', 'values', 'entropies'],
 )
 
 
@@ -44,30 +44,32 @@ def calc_n_step_returns(rewards, last_value_est, gamma):
     n_step_returns = [0] * n_steps
     last_return = last_value_est
     for step_idx in reversed(range(n_steps)):
-        last_return = rewards[step_idx] + gamma * last_return
+        last_return = rewards[step_idx] + gamma * last_return.item()
         n_step_returns[step_idx] = last_return
 
     return n_step_returns
 
 
-def calc_total_loss(results, gamma, clip=1.0, device="cpu"):
+def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu"):
 
     n_step_returns = calc_n_step_returns(
         results.rewards, results.values[-1], gamma
     )
     n_step_returns = torch.tensor(n_step_returns).to(device)
 
-    value_est = torch.tensor(results.values[:-1]).to(device)
+    value_est = torch.hstack(results.values[:-1])
 
-    if clip is None:
+    if clip is None or clip <= 0:
         value_loss = F.mse_loss(value_est, n_step_returns)
     else:
         value_loss = F.smooth_l1_loss(value_est, n_step_returns, beta=clip)
 
     advantage = n_step_returns - value_est
-    policy_loss = -results.log_probs * advantage
+    # TODO: Is the negative correct?
+    policy_loss = -torch.hstack(results.log_probs) * advantage
+    entropy_loss = torch.hstack(results.entropies) * entropy_weight
 
-    loss = value_loss.sum() + policy_loss.sum()
+    loss = value_loss.sum() + policy_loss.sum() + entropy_loss.sum()
 
     return loss
 
@@ -83,7 +85,8 @@ class BaseAgent:
         self.max_vals = self.agent_params.get('max_vals', None)
         self.n_actions = agent_params.get('n_actions')
         self.n_state = agent_params.get('n_state')
-        self.use_smooth_l1_loss = self.agent_params.get('use_smooth_l1_loss', False)
+        self.grad_clip = self.agent_params.get('grad_clip', 1.0) or 0.0
+        self.entropy_weight = self.agent_params.get('entropy_weight', 0.01)
         if self.min_vals and self.max_vals:
             self.mu = (
                 torch.tensor(self.max_vals) + torch.tensor(self.min_vals)
@@ -139,8 +142,9 @@ class AdvantageActorCriticAgent(BaseAgent):
         pdf = Categorical(policy)
         action = pdf.sample()
         log_prob = pdf.log_prob(action)
+        entropy = pdf.entropy()
 
-        return action, value_est, policy, log_prob
+        return action, value_est, entropy, log_prob
 
     # def initialize(self, state):
     #     # TODO: Fix this
@@ -251,20 +255,18 @@ class AdvantageActorCriticAgent(BaseAgent):
     def get_grads(self, results: InteractionResult):
 
         #---- Compute the loss
-
-        # Estimate the n-step returns
-        n_step_returns = calc_n_step_returns(results.rewards, self.gamma)
-        n_step_returns = torch.tensor(n_step_returns).to(self.device)
-
-        val_error = F.smooth_l1_loss(results.values, n_step_returns)
-
+        loss = calc_total_loss(
+            results, self.gamma, clip=self.grad_clip,
+            entropy_weight=self.entropy_weight, device=self.device
+        )
+        loss.backward()
 
         # Extract the grads
         # from collections import OrderedDict
         # grads = OrderedDict()
         grads = {}
         for name, param in self.named_parameters():
-            grads[name] = param.grad
+            grads[name] = param.grad.detach()
 
         return grads
 
@@ -292,13 +294,13 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
 
     if state is None:
         state, info = env.reset()
-        action_idx, value_est, policy = agent.select_action(state)
+        action_idx, value_est, entropy = agent.select_action(state)
         if output_gif:
             frame_buffer.append(env.render())
         state, reward, terminated, _, _ = env.step(action_idx)
         results.rewards.append(reward)
         results.values.append(value_est)
-        results.policies.append(policy)
+        results.entropies.append(entropy)
         if output_gif:
             frame_buffer.append(env.render())
 
@@ -310,12 +312,12 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
         # action_idx = agent.step(reward, state)
 
         # Run network
-        action_idx, value_est, action_probs = agent.select_action(state)
+        action_idx, value_est, entropy = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
 
         results.rewards.append(reward)
         results.values.append(value_est)
-        results.policies.append(policy)
+        results.entropies.append(entropy)
 
         if output_gif:
             frame_buffer.append(env.render())
