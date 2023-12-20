@@ -90,6 +90,7 @@ Evaluation: "The trained agents were evaluated by playing each game 30 times for
 ### Milestones
 
 1. Code the A3C Algorithm and verify that it works on Cart-Pole
+    - A FFW with 128 hidden nodes should work.
 2. Code the ConvNet architecture in the paper and write code to achieve Goal #1
 3. Write code to achieve Goal #2
 4. Code the LSTM and write code to achieve Goal #3

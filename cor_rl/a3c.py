@@ -10,7 +10,7 @@ from cor_rl.factories import ffw_factory
 
 InteractionResult = namedtuple(
     'InteractionResult',
-    ['rewards', 'values', 'entropies'],
+    ['rewards', 'values', 'log_probs', 'entropies'],
 )
 
 
@@ -44,7 +44,7 @@ def calc_n_step_returns(rewards, last_value_est, gamma):
     n_step_returns = [0] * n_steps
     last_return = last_value_est
     for step_idx in reversed(range(n_steps)):
-        last_return = rewards[step_idx] + gamma * last_return.item()
+        last_return = rewards[step_idx] + gamma * last_return
         n_step_returns[step_idx] = last_return
 
     return n_step_returns
@@ -144,7 +144,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         log_prob = pdf.log_prob(action)
         entropy = pdf.entropy()
 
-        return action, value_est, entropy, log_prob
+        return action.item(), value_est, entropy, log_prob
 
     # def initialize(self, state):
     #     # TODO: Fix this
@@ -265,7 +265,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         # from collections import OrderedDict
         # grads = OrderedDict()
         grads = {}
-        for name, param in self.named_parameters():
+        for name, param in self.net.named_parameters():
             grads[name] = param.grad.detach()
 
         return grads
@@ -277,7 +277,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.load_state_dict(state_dict)
 
     def set_grads(self, grads):
-        for name, param in self.named_parameters():
+        for name, param in self.net.named_parameters():
             param.grad = grads[name]
 
 
@@ -288,18 +288,19 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
     """
 
     frame_buffer = []
-    results = InteractionResult([], [], [])
+    results = InteractionResult([], [], [], [])
     terminated = False
     t = 0
 
     if state is None:
         state, info = env.reset()
-        action_idx, value_est, entropy = agent.select_action(state)
+        action_idx, value_est, entropy, log_prob = agent.select_action(state)
         if output_gif:
             frame_buffer.append(env.render())
         state, reward, terminated, _, _ = env.step(action_idx)
         results.rewards.append(reward)
         results.values.append(value_est)
+        results.log_probs.append(log_prob)
         results.entropies.append(entropy)
         if output_gif:
             frame_buffer.append(env.render())
@@ -312,11 +313,12 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
         # action_idx = agent.step(reward, state)
 
         # Run network
-        action_idx, value_est, entropy = agent.select_action(state)
+        action_idx, value_est, entropy, log_prob = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
 
         results.rewards.append(reward)
         results.values.append(value_est)
+        results.log_probs.append(log_prob)
         results.entropies.append(entropy)
 
         if output_gif:
@@ -329,11 +331,12 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
 
     # TODO: I think I need a no_grad estimate of state value...
     if terminated:
-        value_est = 0
+        value_est = 0.0
         state = None
     else:
         with torch.no_grad():
-            action_idx, value_est, action_probs = agent.select_action(state)
+            action_idx, value_est, _, _ = agent.select_action(state)
+        value_est = value_est.item()
 
     results.values.append(value_est)
 
@@ -342,11 +345,13 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
 
 def agent_env_task(agent, env, parameters, state):
 
-    agent.update(parameters)
+    if parameters is not None:
+        agent.update(parameters)
+
     agent.zero_grad()
 
     results, state, terminated, _ = interact(
-        env, agent, t_max=5, state=state
+        env, agent, t_max=25, state=state
     )
 
     # This will run back prop
