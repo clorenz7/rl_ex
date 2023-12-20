@@ -38,17 +38,38 @@ class PolicyValueNetwork(nn.Module):
         return action_probs, value_est
 
 
+def calc_n_step_returns(rewards, last_value_est, gamma):
 
-def calc_n_step_returns(rewards, gamma):
-    # TODO: Add a unit test
     n_steps = len(rewards)
-    n_step_returns = [rewards[-1]] * n_steps
-    for step_idx in reversed(range(n_steps-1)):
-        n_step_returns[step_idx] = (
-            rewards[step_idx] + gamma * n_step_returns[step_idx+1]
-        )
+    n_step_returns = [0] * n_steps
+    last_return = last_value_est
+    for step_idx in reversed(range(n_steps)):
+        last_return = rewards[step_idx] + gamma * last_return
+        n_step_returns[step_idx] = last_return
 
     return n_step_returns
+
+
+def calc_total_loss(results, gamma, clip=1.0, device="cpu"):
+
+    n_step_returns = calc_n_step_returns(
+        results.rewards, results.values[-1], gamma
+    )
+    n_step_returns = torch.tensor(n_step_returns).to(device)
+
+    value_est = torch.tensor(results.values[:-1]).to(device)
+
+    if clip is None:
+        value_loss = F.mse_loss(value_est, n_step_returns)
+    else:
+        value_loss = F.smooth_l1_loss(value_est, n_step_returns, beta=clip)
+
+    advantage = n_step_returns - value_est
+    policy_loss = -results.log_probs * advantage
+
+    loss = value_loss.sum() + policy_loss.sum()
+
+    return loss
 
 
 
@@ -117,8 +138,9 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         pdf = Categorical(policy)
         action = pdf.sample()
+        log_prob = pdf.log_prob(action)
 
-        return action, value_est, policy
+        return action, value_est, policy, log_prob
 
     # def initialize(self, state):
     #     # TODO: Fix this
@@ -232,6 +254,9 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         # Estimate the n-step returns
         n_step_returns = calc_n_step_returns(results.rewards, self.gamma)
+        n_step_returns = torch.tensor(n_step_returns).to(self.device)
+
+        val_error = F.smooth_l1_loss(results.values, n_step_returns)
 
 
         # Extract the grads
@@ -288,10 +313,6 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
         action_idx, value_est, action_probs = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
 
-        if terminated:
-            value_est = 0
-            state = None
-
         results.rewards.append(reward)
         results.values.append(value_est)
         results.policies.append(policy)
@@ -303,6 +324,16 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
     # if terminated:
     #     agent.finish(reward)
     #     state = None
+
+    # TODO: I think I need a no_grad estimate of state value...
+    if terminated:
+        value_est = 0
+        state = None
+    else:
+        with torch.no_grad():
+            action_idx, value_est, action_probs = agent.select_action(state)
+
+    results.values.append(value_est)
 
     return results, state, terminated, frame_buffer
 
