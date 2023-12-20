@@ -1,5 +1,8 @@
-from cor_rl import a3c
+
 import gymnasium as gym
+import torch
+
+from cor_rl import a3c
 
 def test_n_step_returns():
     rewards = [2, 4, 8, 16, 32]
@@ -35,19 +38,27 @@ def test_cart_pole_eval():
 def test_cart_pole_train():
     render_mode = "human" if True else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
+    env.reset(seed=543)
+    torch.manual_seed(543)
+
     agent_params = {
         'hidden_sizes': [128],
         # 'hidden_sizes': [24, 24],
         'n_actions': 2,
         'n_state': 4,
         'gamma': 0.99,
-        'entropy_weight': 0.01
+        'entropy_weight': 0.00
     }
     train_params = {
         'optimizer': 'adam',
         'lr': 1e-3,
     }
     global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+    torch.manual_seed(543)
     agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
 
-    a3c.train_loop(global_agent, agents, [env], step_limit=1e9, episode_limit=2000)
+    a3c.train_loop(
+        global_agent, agents, [env],
+        step_limit=1e9, episode_limit=2000, log_interval=10,
+        solved_thresh=195.0
+    )

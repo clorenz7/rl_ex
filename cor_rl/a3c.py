@@ -26,6 +26,7 @@ class PolicyValueNetwork(nn.Module):
         self.policy_head = nn.Linear(n_hidden, n_actions)
         self.value_head = nn.Linear(n_hidden, 1)
 
+
     def forward(self, x):
         x = self.base_layer(x)
 
@@ -67,9 +68,13 @@ def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu")
     advantage = n_step_returns - value_est
     # TODO: Is the negative correct?
     policy_loss = -torch.hstack(results.log_probs) * advantage
-    entropy_loss = torch.hstack(results.entropies) * entropy_weight
 
-    loss = value_loss.sum() + policy_loss.sum() + entropy_loss.sum()
+    loss = value_loss.sum() + policy_loss.sum()
+
+
+    if entropy_weight > 0:
+        entropy_loss = torch.hstack(results.entropies) * entropy_weight
+        loss = loss + entropy_loss.sum()
 
     return loss
 
@@ -364,39 +369,62 @@ def agent_env_task(agent, env, parameters, state, t_max=5):
     # This will run back prop
     grads = agent.get_grads(results)
 
+    # TODO: Add total reward!
+
     return {
         'grads': grads,
         'state': state,
+        'total_reward': sum(results.rewards),
         'terminated': terminated,
         'n_steps': len(results.rewards),
     }
 
 
-def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None):
+def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None,
+               log_interval=1e9, solved_thresh=None, max_ep_steps=10000):
 
+    solved_thresh = solved_thresh or float('inf')
     total_steps = 0
-    total_episodes = 0
-    ep_steps = 0
+    n_episodes = 0
+    ep_steps, ep_reward = 0, 0
+    avg_reward = 0
     n_threads = len(agents)
     states = [None] * n_threads
 
-    while total_steps < step_limit and total_episodes < episode_limit:
+    while total_steps < step_limit and n_episodes < episode_limit:
         params = global_agent.get_parameters()
         for t_idx in range(n_threads):
             agent = agents[t_idx]
             task_result = agent_env_task(
-                agent, envs[t_idx], params, states[t_idx], t_max=100
+                agent, envs[t_idx], params, states[t_idx], t_max=500
             )
             n_steps = task_result['n_steps']
+            ep_reward += task_result['total_reward']
             ep_steps += n_steps
             total_steps += n_steps
-            states[t_idx] = task_result['state']
+            if ep_steps > max_ep_steps:
+                # Terminate early
+                states[t_idx] = None
+            else:
+                states[t_idx] = task_result['state']
             if states[t_idx] is None:
-                total_episodes += 1
-                print(f"Episode {total_episodes} Terminated after {ep_steps} steps. Total steps: {total_steps}")
-                ep_steps = 0
+                avg_reward = 0.99 * avg_reward + 0.01 * ep_reward
+                n_episodes += 1
+                # print(f"Episode {total_episodes} Terminated after {ep_steps} steps. Total steps: {total_steps}")
+                if (n_episodes % log_interval) == 0:
+                    print(
+                        f'Episode {n_episodes}\tLast reward: {ep_reward:.2f}\t'
+                        f'Average reward: {avg_reward:.2f}'
+                    )
+                ep_steps = ep_reward = 0
+
             global_agent.set_grads(task_result['grads'])
             global_agent.backward()
+
+        if avg_reward > solved_thresh:
+            print(f'Episode {n_episodes}\tLast reward: {ep_reward:.2f}\tAverage reward: {avg_reward:.2f}')
+            print("PROBLEM SOLVED!")
+            break
 
 
 
