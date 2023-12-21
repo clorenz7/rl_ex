@@ -48,11 +48,11 @@ def test_cart_pole_train():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'grad_clip': 1.0,
+        'grad_clip': 2.0,
     }
     train_params = {
         'optimizer': 'adamw',
-        'lr': 3e-2,
+        'lr': 3e-3,
         'weight_decay': 0.0,
     }
     global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)

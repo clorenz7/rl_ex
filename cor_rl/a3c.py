@@ -56,7 +56,7 @@ def calc_n_step_returns(rewards, last_value_est, gamma):
     return n_step_returns
 
 
-def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu"):
+def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu", norm_returns=False):
 
     n_step_returns = calc_n_step_returns(
         results.rewards, results.values[-1], gamma
@@ -65,16 +65,15 @@ def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu")
 
     value_est = torch.hstack(results.values[:-1])
 
-    # TODO: Pytorch does this, dunno exactly why
-    n_step_returns = (n_step_returns - n_step_returns.mean()) / (n_step_returns.std() + eps)
+    if norm_returns:
+        # Pytorch reference implementation does this, dunno exactly why
+        n_step_returns = (n_step_returns - n_step_returns.mean()) / (n_step_returns.std() + eps)
 
     if clip is None or clip <= 0:
         value_loss = F.mse_loss(value_est, n_step_returns)
     else:
         value_loss = F.smooth_l1_loss(value_est, n_step_returns, beta=clip, reduction="none")
 
-    # TODO: This should maybe be value_est.detach()
-    # advantage = n_step_returns - value_est
     advantage = n_step_returns - value_est.detach()
 
     policy_loss = -torch.hstack(results.log_probs) * advantage
