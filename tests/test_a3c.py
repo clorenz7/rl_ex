@@ -74,7 +74,6 @@ def test_cart_pole_train_batched():
 
     agent_params = {
         'hidden_sizes': [128],
-        # 'hidden_sizes': [24, 24],
         'n_actions': 2,
         'n_state': 4,
         'gamma': 0.99,
@@ -94,6 +93,40 @@ def test_cart_pole_train_batched():
         global_agent, agents, [env],
         step_limit=1e9, episode_limit=2000, log_interval=10,
         solved_thresh=env.spec.reward_threshold, t_max=5
+    )
+
+def test_cart_pole_train_multi():
+    torch.manual_seed(543)
+
+    agent_params = {
+        'hidden_sizes': [128],
+        'n_actions': 2,
+        'n_state': 4,
+        'gamma': 0.99,
+        'entropy_weight': 0.00,
+        'grad_clip': 2.0,
+    }
+    train_params = {
+        'optimizer': 'adamw',
+        'lr': 1e-3,
+        'weight_decay': 0.0,
+    }
+    global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+
+    agents, envs = [], []
+    n_threads = 3
+
+    for ii in range(n_threads):
+        agents.append(
+            a3c.AdvantageActorCriticAgent(agent_params, train_params),
+        )
+        envs.append(gym.make('CartPole-v1'))
+        envs[-1].reset(seed=543 + 10 * ii)
+
+    a3c.train_loop(
+        global_agent, agents, envs,
+        step_limit=1e9, episode_limit=2000, log_interval=10,
+        solved_thresh=envs[0].spec.reward_threshold, t_max=5
     )
 
 
