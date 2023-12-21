@@ -114,8 +114,8 @@ def test_cart_pole_train_arch():
     }
     train_params = {
         'optimizer': 'adamw',
-        'lr': 1e-3,
-        'weight_decay': 1e-3,
+        'lr': 1e-3 * 2,
+        'weight_decay': 1e-4,
     }
     global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
     torch.manual_seed(543)
