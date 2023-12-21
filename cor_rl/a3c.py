@@ -6,7 +6,10 @@ from torch import nn
 from torch.distributions import Categorical
 import torch.nn.functional as F
 
-from cor_rl.factories import ffw_factory
+from cor_rl.factories import (
+    ffw_factory,
+    optimizer_factory,
+)
 
 
 InteractionResult = namedtuple(
@@ -36,7 +39,6 @@ class PolicyValueNetwork(nn.Module):
         x = self.base_layer(x)
 
         logits = self.policy_head(x)
-
         action_probs = F.softmax(logits, dim=-1)
 
         value_est = self.value_head(x)
@@ -132,36 +134,14 @@ class AdvantageActorCriticAgent(BaseAgent):
     def state_to_features(self, state):
         return self.normalize_state(state)
 
-    def set_optimizer(self):
-        # TODO: Move this to an optimizer factory
-        if self.optimizer_name == "adam":
-            self.optimizer = torch.optim.Adam(
-                self.net.parameters(),
-                **self.train_params
-            )
-        elif self.optimizer_name == "adamw":
-            # Has a non-zero value for weight decay, be warned!
-            self.optimizer = torch.optim.AdamW(
-                self.net.parameters(),
-                **self.train_params
-            )
-        elif self.optimizer_name == "rmsprop":
-            self.optimizer = torch.optim.RMSprop(
-                self.net.parameters(),
-                **self.train_params
-            )
-        else:
-            self.optimizer = torch.optim.SGD(
-                self.net.parameters(),
-                **self.train_params
-            )
-
     def reset(self):
         self.net = PolicyValueNetwork(
             self.n_state, self.n_actions, self.hidden_sizes
         )
 
-        self.set_optimizer()
+        self.optimizer = optimizer_factory.get(
+            self.optimizer_name, self.train_params, self.net
+        )
 
     def checkpoint(self, file_name):
         torch.save(self.net, file_name)

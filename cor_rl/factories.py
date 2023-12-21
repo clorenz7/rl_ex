@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 
 
@@ -38,3 +39,39 @@ def ffw_factory(layer_sizes, activation=nn.ELU, final_activation=None):
             layers.append(final_activation())
 
     return nn.Sequential(*layers)
+
+
+class OptimizerFactory:
+    _MAP = {
+        "adam": torch.optim.Adam,
+        "adamw": torch.optim.AdamW,
+        "rmsprop": torch.optim.RMSprop,
+        "SGD": torch.optim.SGD,
+    }
+
+    def get(self, optimizer_name, optimizer_params=None, net=None, param_list=None):
+        optimizer_params = optimizer_params or {}
+        if not optimizer_name:
+            optimizer_name = "sgd"
+        constructor = self._MAP.get(optimizer_name.lower(), None)
+        if constructor is None:
+            constructor = getattr(torch.optim, optimizer_name)
+
+        if net is not None:
+            optimizer = constructor(
+                net.parameters(),
+                **optimizer_params
+            )
+        elif param_list is not None:
+            optimizer = constructor(
+                param_list,
+                **optimizer_params
+            )
+        else:
+            raise ValueError("Either net or param_list must be not None!")
+
+        return optimizer
+
+
+optimizer_factory = OptimizerFactory()
+
