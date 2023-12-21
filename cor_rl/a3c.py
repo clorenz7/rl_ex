@@ -1,5 +1,6 @@
 from collections import namedtuple
 
+import numpy as np
 import torch
 from torch import nn
 from torch.distributions import Categorical
@@ -13,19 +14,23 @@ InteractionResult = namedtuple(
     ['rewards', 'values', 'log_probs', 'entropies'],
 )
 
+eps = np.finfo(np.float32).eps.item()
+
+global EPISODE
+EPISODE = 0
+
 
 class PolicyValueNetwork(nn.Module):
 
     def __init__(self, n_state, n_actions, hidden_layers):
         super().__init__()
         layer_sizes = [n_state] + hidden_layers
-        self.base_layer = ffw_factory(layer_sizes, 'relu')
+        self.base_layer = ffw_factory(layer_sizes, 'relu', 'relu')
 
         n_hidden = hidden_layers[-1]
 
         self.policy_head = nn.Linear(n_hidden, n_actions)
         self.value_head = nn.Linear(n_hidden, 1)
-
 
     def forward(self, x):
         x = self.base_layer(x)
@@ -60,17 +65,21 @@ def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu")
 
     value_est = torch.hstack(results.values[:-1])
 
+    # TODO: Pytorch does this, dunno exactly why
+    n_step_returns = (n_step_returns - n_step_returns.mean()) / (n_step_returns.std() + eps)
+
     if clip is None or clip <= 0:
         value_loss = F.mse_loss(value_est, n_step_returns)
     else:
-        value_loss = F.smooth_l1_loss(value_est, n_step_returns, beta=clip)
+        value_loss = F.smooth_l1_loss(value_est, n_step_returns, beta=clip, reduction="none")
 
-    advantage = n_step_returns - value_est
-    # TODO: Is the negative correct?
+    # TODO: This should maybe be value_est.detach()
+    # advantage = n_step_returns - value_est
+    advantage = n_step_returns - value_est.detach()
+
     policy_loss = -torch.hstack(results.log_probs) * advantage
 
     loss = value_loss.sum() + policy_loss.sum()
-
 
     if entropy_weight > 0:
         entropy_loss = torch.hstack(results.entropies) * entropy_weight
@@ -111,7 +120,8 @@ class BaseAgent:
         return state
 
     def normalize_state(self, state):
-        features = torch.tensor(state)
+        # features = torch.tensor(state)
+        features = torch.from_numpy(state).float()
         if self.mu:
             features = (features - self.mu)/self.sigma
 
@@ -228,6 +238,11 @@ class AdvantageActorCriticAgent(BaseAgent):
     def set_optimizer(self):
         # TODO: Move this to an optimizer factory
         if self.optimizer_name == "adam":
+            self.optimizer = torch.optim.Adam(
+                self.net.parameters(),
+                **self.train_params
+            )
+        elif self.optimizer_name == "adamw":
             self.optimizer = torch.optim.AdamW(
                 self.net.parameters(),
                 **self.train_params
@@ -256,10 +271,9 @@ class AdvantageActorCriticAgent(BaseAgent):
     def load(self, file_name: str):
         self.net = torch.load(file_name).to(self.device)
 
-
     def get_grads(self, results: InteractionResult):
 
-        #---- Compute the loss
+        # Compute the loss
         loss = calc_total_loss(
             results, self.gamma, clip=self.grad_clip,
             entropy_weight=self.entropy_weight, device=self.device
@@ -292,6 +306,8 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.optimizer.step()
         # TODO: Add learning rate scheduler
 
+        self.optimizer.zero_grad()
+
 
 def interact(env, agent, t_max=5, state=None, output_gif=False):
     """
@@ -306,18 +322,19 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
 
     if state is None:
         state, info = env.reset()
-        action_idx, value_est, entropy, log_prob = agent.select_action(state)
         if output_gif:
             frame_buffer.append(env.render())
-        state, reward, terminated, _, _ = env.step(action_idx)
-        results.rewards.append(reward)
-        results.values.append(value_est)
-        results.log_probs.append(log_prob)
-        results.entropies.append(entropy)
-        if output_gif:
-            frame_buffer.append(env.render())
+        # action_idx, value_est, entropy, log_prob = agent.select_action(state)
 
-        t += 1
+        # state, reward, terminated, _, _ = env.step(action_idx)
+        # results.rewards.append(reward)
+        # results.values.append(value_est)
+        # results.log_probs.append(log_prob)
+        # results.entropies.append(entropy)
+        # if output_gif:
+        #     frame_buffer.append(env.render())
+
+        # t += 1
 
     while t < t_max and not terminated:
         # TODO: I think I need to decouple reward and state...
@@ -383,34 +400,41 @@ def agent_env_task(agent, env, parameters, state, t_max=5):
 def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None,
                log_interval=1e9, solved_thresh=None, max_ep_steps=10000):
 
+    global EPISODE
+
     solved_thresh = solved_thresh or float('inf')
     total_steps = 0
     n_episodes = 0
     ep_steps, ep_reward = 0, 0
-    avg_reward = 0
+    avg_reward = 10
+    beta = 0.05
+
     n_threads = len(agents)
     states = [None] * n_threads
+    print("")
 
     while total_steps < step_limit and n_episodes < episode_limit:
         params = global_agent.get_parameters()
         for t_idx in range(n_threads):
             agent = agents[t_idx]
             task_result = agent_env_task(
-                agent, envs[t_idx], params, states[t_idx], t_max=500
+                agent, envs[t_idx], params, states[t_idx], t_max=10000
             )
             n_steps = task_result['n_steps']
             ep_reward += task_result['total_reward']
             ep_steps += n_steps
             total_steps += n_steps
-            if ep_steps > max_ep_steps:
+            if ep_steps >= max_ep_steps:
                 # Terminate early
                 states[t_idx] = None
             else:
                 states[t_idx] = task_result['state']
+
             if states[t_idx] is None:
                 last_reward = ep_reward
-                avg_reward = 0.99 * avg_reward + 0.01 * ep_reward
+                avg_reward = (1.0 - beta) * avg_reward + beta * ep_reward
                 n_episodes += 1
+                EPISODE = n_episodes
                 # print(f"Episode {total_episodes} Terminated after {ep_steps} steps. Total steps: {total_steps}")
                 if (n_episodes % log_interval) == 0:
                     print(
