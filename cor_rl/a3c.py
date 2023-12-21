@@ -57,6 +57,7 @@ def calc_n_step_returns(rewards, last_value_est, gamma):
 
 
 def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu", norm_returns=False):
+    # TODO: This should probably be part of the agent class
 
     n_step_returns = calc_n_step_returns(
         results.rewards, results.values[-1], gamma
@@ -67,6 +68,7 @@ def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu",
 
     if norm_returns:
         # Pytorch reference implementation does this, dunno exactly why
+        # But my intuition is that it helps deal with the way total return increases as algo improves
         n_step_returns = (n_step_returns - n_step_returns.mean()) / (n_step_returns.std() + eps)
 
     if clip is None or clip <= 0:
@@ -85,7 +87,6 @@ def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu",
         loss = loss + entropy_loss.sum()
 
     return loss
-
 
 
 class BaseAgent:
@@ -160,79 +161,8 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         return action.item(), value_est, entropy, log_prob
 
-    # def initialize(self, state):
-    #     # TODO: Fix this
-    #     self.last_state = state
-    #     self.last_action = self.select_action(features=self.last_features)
-    #     value_est = self.critic(self.last_features)
-    #     self.last_value_est = value_est
-    #     return self.last_action
-
     def state_to_features(self, state):
         return self.normalize_state(state)
-
-    # def step(self, reward, state, debug=False):
-    #     # TODO: Fix this
-    #     features = self.state_to_features(state)
-
-    #     last_log_prob = self.last_log_prob
-    #     prev_value_est = self.last_value_est
-
-    #     with torch.no_grad():
-    #         value_est = self.critic(features)
-    #     total_return_est = reward + self.gamma * value_est
-
-    #     # Semi-gradient update
-    #     delta = total_return_est - prev_value_est.item()
-
-    #     policy_loss = delta * -last_log_prob
-    #     value_loss = F.smooth_l1_loss(total_return_est, prev_value_est)
-    #     loss = policy_loss + value_loss
-
-    #     if self.optimizer is None:
-    #         self.actor_optimizer.zero_grad(set_to_none=True)
-    #         self.critic_optimizer.zero_grad(set_to_none=True)
-    #         value_loss.backward(retain_graph=True)
-    #         policy_loss.backward()
-    #         self.critic_optimizer.step()
-    #         self.actor_optimizer.step()
-    #     else:
-    #         self.optimizer.zero_grad(set_to_none=True)
-    #         loss.backward()
-    #         self.optimizer.step()
-
-    #     next_action = self.select_action(features=features)
-    #     value_est = self.critic(features)
-
-    #     self.last_state = state
-    #     self.last_features = features
-    #     self.last_action = next_action
-    #     self.last_value_est = value_est
-
-    #     return next_action
-
-    def finish(self, reward):
-        last_log_prob = self.last_log_prob
-        prev_value_est = self.last_value_est
-        # Semi-gradient update
-        delta = reward - prev_value_est.item()
-
-        policy_loss = delta * -last_log_prob
-        value_loss = F.smooth_l1_loss(
-            torch.tensor([reward], device=self.device), prev_value_est
-        )
-        if self.optimizer is None:
-            self.actor_optimizer.zero_grad(set_to_none=True)
-            self.critic_optimizer.zero_grad(set_to_none=True)
-            value_loss.backward(retain_graph=True)
-            policy_loss.backward()
-            self.critic_optimizer.step()
-            self.actor_optimizer.step()
-        else:
-            self.optimizer.zero_grad(set_to_none=True)
-            loss = policy_loss + value_loss
-            loss.backward()
-            self.optimizer.step()
 
     def set_optimizer(self):
         # TODO: Move this to an optimizer factory
@@ -242,6 +172,7 @@ class AdvantageActorCriticAgent(BaseAgent):
                 **self.train_params
             )
         elif self.optimizer_name == "adamw":
+            # Has a non-zero value for weight decay, be warned!
             self.optimizer = torch.optim.AdamW(
                 self.net.parameters(),
                 **self.train_params
@@ -279,9 +210,6 @@ class AdvantageActorCriticAgent(BaseAgent):
         )
         loss.backward()
 
-        # Extract the grads
-        # from collections import OrderedDict
-        # grads = OrderedDict()
         grads = {}
         for name, param in self.net.named_parameters():
             grads[name] = param.grad.detach()
@@ -323,23 +251,8 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
         state, info = env.reset()
         if output_gif:
             frame_buffer.append(env.render())
-        # action_idx, value_est, entropy, log_prob = agent.select_action(state)
-
-        # state, reward, terminated, _, _ = env.step(action_idx)
-        # results.rewards.append(reward)
-        # results.values.append(value_est)
-        # results.log_probs.append(log_prob)
-        # results.entropies.append(entropy)
-        # if output_gif:
-        #     frame_buffer.append(env.render())
-
-        # t += 1
 
     while t < t_max and not terminated:
-        # TODO: I think I need to decouple reward and state...
-        # Think through input and outputs of networks and steps
-        # action_idx = agent.step(reward, state)
-
         # Run network
         action_idx, value_est, entropy, log_prob = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
@@ -353,15 +266,11 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
             frame_buffer.append(env.render())
         t += 1
 
-    # if terminated:
-    #     agent.finish(reward)
-    #     state = None
-
-    # TODO: I think I need a no_grad estimate of state value...
     if terminated:
         value_est = 0.0
         state = None
     else:
+        # Get an estimate of the value of the final state
         with torch.no_grad():
             action_idx, value_est, _, _ = agent.select_action(state)
         value_est = value_est.item()
@@ -434,7 +343,6 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
                 avg_reward = (1.0 - beta) * avg_reward + beta * ep_reward
                 n_episodes += 1
                 EPISODE = n_episodes
-                # print(f"Episode {total_episodes} Terminated after {ep_steps} steps. Total steps: {total_steps}")
                 if (n_episodes % log_interval) == 0:
                     print(
                         f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\t'
@@ -449,8 +357,4 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
             print(f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\tAverage reward: {avg_reward:.2f}')
             print("PROBLEM SOLVED!")
             break
-
-
-
-
 
