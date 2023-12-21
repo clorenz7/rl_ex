@@ -65,6 +65,7 @@ def test_cart_pole_train():
         solved_thresh=env.spec.reward_threshold
     )
 
+
 def test_cart_pole_train_batched():
     render_mode = "human" if False else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
@@ -93,4 +94,35 @@ def test_cart_pole_train_batched():
         global_agent, agents, [env],
         step_limit=1e9, episode_limit=2000, log_interval=10,
         solved_thresh=env.spec.reward_threshold, t_max=5
+    )
+
+
+def test_cart_pole_train_arch():
+    render_mode = "human" if False else 'rgb_array'
+    env = gym.make('CartPole-v1', render_mode=render_mode)
+    env.reset(seed=543)
+    torch.manual_seed(543)
+
+    agent_params = {
+        # 'hidden_sizes': [128],
+        'hidden_sizes': [32, 32],
+        'n_actions': 2,
+        'n_state': 4,
+        'gamma': 0.99,
+        'entropy_weight': 0.00,
+        'grad_clip': 2.0,
+    }
+    train_params = {
+        'optimizer': 'adamw',
+        'lr': 1e-3,
+        'weight_decay': 1e-3,
+    }
+    global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+    torch.manual_seed(543)
+    agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
+
+    a3c.train_loop(
+        global_agent, agents, [env],
+        step_limit=1e9, episode_limit=2000, log_interval=10,
+        solved_thresh=env.spec.reward_threshold, t_max=1250
     )
