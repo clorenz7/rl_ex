@@ -56,39 +56,6 @@ def calc_n_step_returns(rewards, last_value_est, gamma):
     return n_step_returns
 
 
-def calc_total_loss(results, gamma, clip=1.0, entropy_weight=0.01, device="cpu", norm_returns=False):
-    # TODO: This should probably be part of the agent class
-
-    n_step_returns = calc_n_step_returns(
-        results.rewards, results.values[-1], gamma
-    )
-    n_step_returns = torch.tensor(n_step_returns).to(device)
-
-    value_est = torch.hstack(results.values[:-1])
-
-    if norm_returns:
-        # Pytorch reference implementation does this, dunno exactly why
-        # But my intuition is that it helps deal with the way total return increases as algo improves
-        n_step_returns = (n_step_returns - n_step_returns.mean()) / (n_step_returns.std() + eps)
-
-    if clip is None or clip <= 0:
-        value_loss = F.mse_loss(value_est, n_step_returns)
-    else:
-        value_loss = F.smooth_l1_loss(value_est, n_step_returns, beta=clip, reduction="none")
-
-    advantage = n_step_returns - value_est.detach()
-
-    policy_loss = -torch.hstack(results.log_probs) * advantage
-
-    loss = value_loss.sum() + policy_loss.sum()
-
-    if entropy_weight > 0:
-        entropy_loss = torch.hstack(results.entropies) * entropy_weight
-        loss = loss + entropy_loss.sum()
-
-    return loss
-
-
 class BaseAgent:
 
     def __init__(self, agent_params):
@@ -120,7 +87,6 @@ class BaseAgent:
         return state
 
     def normalize_state(self, state):
-        # features = torch.tensor(state)
         features = torch.from_numpy(state).float()
         if self.mu:
             features = (features - self.mu)/self.sigma
@@ -141,6 +107,8 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         self.train_params = train_params
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
+
+        self.norm_returns = self.agent_params.get('norm_returns', False)
 
         alpha = self.train_params.pop('alpha', None)
         if alpha is not None:
@@ -201,13 +169,45 @@ class AdvantageActorCriticAgent(BaseAgent):
     def load(self, file_name: str):
         self.net = torch.load(file_name).to(self.device)
 
+    def calculate_loss(self, results):
+        n_step_returns = calc_n_step_returns(
+            results.rewards, results.values[-1], self.gamma
+        )
+        n_step_returns = torch.tensor(n_step_returns).to(self.device)
+
+        value_est = torch.hstack(results.values[:-1])
+
+        if self.norm_returns:
+            # Pytorch reference implementation does this, dunno exactly why
+            # But my intuition is that it helps deal with the way
+            # total return increases as algo improves
+            std = n_step_returns.std() + eps
+            n_step_returns = (n_step_returns - n_step_returns.mean()) / std
+
+        if self.grad_clip is None or self.grad_clip <= 0:
+            value_loss = F.mse_loss(value_est, n_step_returns)
+        else:
+            value_loss = F.smooth_l1_loss(
+                value_est, n_step_returns,
+                beta=self.grad_clip, reduction="none"
+            )
+
+        advantage = n_step_returns - value_est.detach()
+
+        policy_loss = -torch.hstack(results.log_probs) * advantage
+
+        loss = value_loss.sum() + policy_loss.sum()
+
+        if self.entropy_weight > 0:
+            entropy_loss = torch.hstack(results.entropies)
+            loss = loss + entropy_loss.sum() * self.entropy_weight
+
+        return loss
+
     def get_grads(self, results: InteractionResult):
 
         # Compute the loss
-        loss = calc_total_loss(
-            results, self.gamma, clip=self.grad_clip,
-            entropy_weight=self.entropy_weight, device=self.device
-        )
+        loss = self.calculate_loss(results)
         loss.backward()
 
         grads = {}
@@ -219,7 +219,7 @@ class AdvantageActorCriticAgent(BaseAgent):
     def zero_grad(self):
         self.optimizer.zero_grad()
 
-    def update(self, state_dict):
+    def set_parameters(self, state_dict):
         self.net.load_state_dict(state_dict)
 
     def get_parameters(self):
@@ -283,7 +283,7 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
 def agent_env_task(agent, env, parameters, state, t_max=5):
 
     if parameters is not None:
-        agent.update(parameters)
+        agent.set_parameters(parameters)
 
     agent.zero_grad()
 
@@ -293,8 +293,6 @@ def agent_env_task(agent, env, parameters, state, t_max=5):
 
     # This will run back prop
     grads = agent.get_grads(results)
-
-    # TODO: Add total reward!
 
     return {
         'grads': grads,

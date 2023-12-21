@@ -32,10 +32,8 @@ def test_cart_pole_eval():
 
     result = a3c.agent_env_task(agent, env, parameters=None, state=None)
 
-    import ipdb; ipdb.set_trace()
 
-
-def test_cart_pole_train():
+def test_cart_pole_train_pt_rep():
     render_mode = "human" if False else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
     env.reset(seed=543)
