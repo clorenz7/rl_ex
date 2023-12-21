@@ -306,7 +306,7 @@ def agent_env_task(agent, env, parameters, state, t_max=5):
 
 
 def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None,
-               log_interval=1e9, solved_thresh=None, max_ep_steps=10000):
+               log_interval=1e9, solved_thresh=None, max_ep_steps=10000, t_max=10000):
 
     global EPISODE
 
@@ -326,7 +326,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
         for t_idx in range(n_threads):
             agent = agents[t_idx]
             task_result = agent_env_task(
-                agent, envs[t_idx], params, states[t_idx], t_max=10000
+                agent, envs[t_idx], params, states[t_idx], t_max=t_max
             )
             n_steps = task_result['n_steps']
             ep_reward += task_result['total_reward']
