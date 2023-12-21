@@ -408,12 +408,13 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
             else:
                 states[t_idx] = task_result['state']
             if states[t_idx] is None:
+                last_reward = ep_reward
                 avg_reward = 0.99 * avg_reward + 0.01 * ep_reward
                 n_episodes += 1
                 # print(f"Episode {total_episodes} Terminated after {ep_steps} steps. Total steps: {total_steps}")
                 if (n_episodes % log_interval) == 0:
                     print(
-                        f'Episode {n_episodes}\tLast reward: {ep_reward:.2f}\t'
+                        f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\t'
                         f'Average reward: {avg_reward:.2f}'
                     )
                 ep_steps = ep_reward = 0
@@ -422,7 +423,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
             global_agent.backward()
 
         if avg_reward > solved_thresh:
-            print(f'Episode {n_episodes}\tLast reward: {ep_reward:.2f}\tAverage reward: {avg_reward:.2f}')
+            print(f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\tAverage reward: {avg_reward:.2f}')
             print("PROBLEM SOLVED!")
             break
 
