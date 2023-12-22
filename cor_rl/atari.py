@@ -57,5 +57,6 @@ def preprocess_frames(frame, prev_frame, out_size=(84, 84)):
     luminance_frame = np.dot(composite_frame, LUM_COEFFS)
 
     out_frame = skimage.transform.resize(luminance_frame, out_size)
+    out_frame /= 255.0
 
     return out_frame
