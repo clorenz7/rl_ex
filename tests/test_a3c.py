@@ -217,7 +217,7 @@ def test_cart_pole_train_a3c():
     )
     assert solved
 
-    make_gif = True
+    make_gif = False
     if make_gif:
         import os
         render_mode = "human" if False else 'rgb_array'

@@ -21,10 +21,7 @@ InteractionResult = namedtuple(
     ['rewards', 'values', 'log_probs', 'entropies'],
 )
 
-eps = np.finfo(np.float32).eps.item()
-
-global EPISODE
-EPISODE = 0
+EPS = np.finfo(np.float32).eps.item()
 
 
 class PolicyValueNetwork(nn.Module):
@@ -103,22 +100,14 @@ class BaseAgent:
 class AdvantageActorCriticAgent(BaseAgent):
     def __init__(self, agent_params={}, train_params={}, device="cpu"):
         super().__init__(agent_params)
-        self.last_state = None
-        self.last_action = None
-
         self.device = device
 
         self.hidden_sizes = agent_params.get('hidden_sizes', None)
-        self.n_state = agent_params.get('n_state', 2)
 
         self.train_params = train_params
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
 
         self.norm_returns = self.agent_params.get('norm_returns', False)
-
-        alpha = self.train_params.pop('alpha', None)
-        if alpha is not None:
-            self.train_params['lr'] = alpha
 
         self.reset()
 
@@ -165,7 +154,7 @@ class AdvantageActorCriticAgent(BaseAgent):
             # Pytorch reference implementation does this, dunno exactly why
             # But my intuition is that it helps deal with the way
             # total return increases as algo improves
-            std = n_step_returns.std() + eps
+            std = n_step_returns.std() + EPS
             n_step_returns = (n_step_returns - n_step_returns.mean()) / std
 
         if self.grad_clip is None or self.grad_clip <= 0:
@@ -176,8 +165,8 @@ class AdvantageActorCriticAgent(BaseAgent):
                 beta=self.grad_clip, reduction="none"
             )
 
+        # Advantage is a semi-gradient update
         advantage = n_step_returns - value_est.detach()
-
         policy_loss = -torch.hstack(results.log_probs) * advantage
 
         loss = value_loss.sum() + policy_loss.sum()
@@ -187,21 +176,6 @@ class AdvantageActorCriticAgent(BaseAgent):
             loss = loss + entropy_loss.sum() * self.entropy_weight
 
         return loss
-
-    def get_grads(self, results: InteractionResult):
-
-        # Compute the loss
-        loss = self.calculate_loss(results)
-        loss.backward()
-
-        grads = {}
-        for name, param in self.net.named_parameters():
-            grads[name] = param.grad.detach()
-
-        return grads
-
-    def zero_grad(self):
-        self.optimizer.zero_grad()
 
     def set_parameters(self, state_dict):
         tensor_state = {}
@@ -220,10 +194,24 @@ class AdvantageActorCriticAgent(BaseAgent):
         for name, param in self.net.named_parameters():
             param.grad = grads[name]
 
+    def get_grads(self, results: InteractionResult):
+        # Compute the loss
+        loss = self.calculate_loss(results)
+        loss.backward()
+
+        grads = {}
+        for name, param in self.net.named_parameters():
+            grads[name] = param.grad.detach()
+
+        return grads
+
     def backward(self):
         self.optimizer.step()
         # TODO: Add learning rate scheduler
 
+        self.optimizer.zero_grad()
+
+    def zero_grad(self):
         self.optimizer.zero_grad()
 
 
@@ -301,19 +289,18 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
 
 
 def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None,
-               log_interval=1e9, solved_thresh=None, max_ep_steps=10000, t_max=10000, debug=False):
+               log_interval=1e9, solved_thresh=None, max_ep_steps=10000, t_max=10000, debug=False,
+               avg_decay=0.95):
     """
     This is a single threaded training loop
     """
     start_time = time.time()
-    global EPISODE
 
     solved_thresh = solved_thresh or float('inf')
     total_steps = 0
     n_episodes = 0
     ep_steps, ep_reward = 0, 0
     avg_reward = 0
-    beta = 0.05
     solved = False
 
     n_threads = len(agents)
@@ -349,9 +336,10 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
 
             if states[t_idx] is None:
                 last_reward = ep_reward
-                avg_reward = (1.0 - beta) * avg_reward + beta * ep_reward
+                avg_reward = (
+                    avg_decay * avg_reward + (1.0 - avg_decay) * ep_reward
+                )
                 n_episodes += 1
-                EPISODE = n_episodes
                 if (n_episodes % log_interval) == 0:
                     print(
                         f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\t'
@@ -381,7 +369,12 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
 
 
 @contextmanager
-def managed_piped_workers(n_workers, worker_func, worker_args):
+def piped_workers(n_workers, worker_func, worker_args):
+    """
+    Context manager to manage a set of training worker threads.
+
+    Pipes and processes are automatically closed and terminated.
+    """
 
     parent_conns, child_conns = [], []
     worker_processes = []
@@ -407,7 +400,7 @@ def managed_piped_workers(n_workers, worker_func, worker_args):
             child_conns[i].close()
 
 
-def worker_task(task_id, conn, agent_params, train_params, env_params):
+def worker_thread(task_id, conn, agent_params, train_params, env_params):
 
     env_name = env_params['env_name']
     seed = env_params.get('seed', 8888)
@@ -418,61 +411,80 @@ def worker_task(task_id, conn, agent_params, train_params, env_params):
         task_seed = seed + task_id * 10
         env.reset(seed=task_seed)
         torch.manual_seed(task_seed)
-    state = None  # Force reset to match other work
+    state = None  # Force reset to match previous work
 
     agent = AdvantageActorCriticAgent(agent_params, train_params)
-    torch.manual_seed(task_seed)
+    torch.manual_seed(task_seed)  # Reset seed to match previous work
 
     while True:
         # Receive a task from the parent process
         task = conn.recv()
+        task_type = task.get('type', '')
 
-        if task.get('msg', '') == 'params':
-            params = agent.get_parameters()
-            params['seed'] = [task_seed, seed]
-            params['state'] = [] if state is None else state.tolist()
-            conn.send(params)
-
-        if task.get('msg', '') == 'state':
-            conn.send([] if state is None else state.tolist())
-
-        if task.get('msg', '') == 'train':
+        if task_type == 'train':
             # Allow controller to reset the environment
             if task.get('reset', False):
                 state = None
 
+            # Train the agent for a few steps
             result = agent_env_task(
                 agent, env, task['params'], state,
                 t_max=task['max_steps']
             )
+            # Update the state for next time
             state = result['state']
+            # Keep track of steps for this episode and end if too many
             ep_steps += result['n_steps']
             if ep_steps >= max_steps_per_episode:
                 state = None
                 result['terminated'] = True
 
+            # Restart counter if terminated
             if result['terminated']:
                 ep_steps = 0
 
+            # Send result to parent process
             conn.send(result)
 
-        if task.get('msg', '') == 'MARCO':
-            conn.send({'polo': state.tolist()})
-
-        if task.get('msg', '') == 'STOP':
+        elif task_type == 'params':
+            params = agent.get_parameters()
+            params['seed'] = [task_seed, seed]
+            params['state'] = [] if state is None else state.tolist()
+            conn.send(params)
+        elif task_type == 'state':
+            conn.send([] if state is None else state.tolist())
+        elif task_type == 'STOP':
             conn.send("FINISH HIM!")
             break
 
 
-def train_loop_parallel(n_workers, agent_params, train_params, env_name, steps_per_batch=5,
-                        total_step_limit=10000, episode_limit=None, max_steps_per_episode=10000,
-                        solved_thresh=None, log_interval=1e9, seed=8888, avg_decay=0.95,
-                        debug=False):
+def _show_params(params, msg_pipe):
+    print("Global Agent Params:")
+    for key, val in params.items():
+        print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+    msg_pipe.send({'type': 'params'})
+    w_params = msg_pipe.recv()
+    for key, val in w_params.items():
+        print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+
+
+def _show_grads(result):
+    print(f"State: {result['state']}")
+    print("\nWorker Agent Grads:")
+    for key, val in result['grads'].items():
+        print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+    import ipdb; ipdb.set_trace()
+
+
+def train_loop_parallel(n_workers, agent_params, train_params, env_name,
+                        steps_per_batch=5, total_step_limit=10000,
+                        episode_limit=None, max_steps_per_episode=10000,
+                        solved_thresh=None, log_interval=1e9, seed=8888,
+                        avg_decay=0.95, debug=False):
     start_time = time.time()
 
     solved_thresh = solved_thresh or float('inf')
-    total_steps = 0
-    total_episodes = 0
+    total_steps = total_episodes = 0
     ep_steps, ep_reward = [0]*n_workers, [0]*n_workers
     avg_reward = 0
     solved = False
@@ -485,62 +497,57 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name, steps_p
         'max_steps_per_episode': max_steps_per_episode,
     }
 
-    worker_args = [agent_params, train_params, env_params]
+    # Seed and create the global agent
     if seed:
         torch.manual_seed(seed)
-
     global_agent = AdvantageActorCriticAgent(agent_params, train_params)
 
-    with managed_piped_workers(n_workers, worker_task, worker_args) as msg_pipes:
+    worker_args = [agent_params, train_params, env_params]
+    with piped_workers(n_workers, worker_thread, worker_args) as msg_pipes:
         while keep_training:
             params = global_agent.get_parameters()
             if debug:
-                print("Global Agent Params:")
-                for key, val in params.items():
-                    print(f'{key}: {torch.tensor(val).flatten()[:2]}')
-                w_idx = 0
-                msg_pipes[w_idx].send({'msg': 'params'})
-                w_params = msg_pipes[w_idx].recv()
-                for key, val in w_params.items():
-                    print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+                _show_params(params, msg_pipes[0])
 
+            # Signal each of the workers to generate a batch of data
             payload = {
-                'msg': 'train',
+                'type': 'train',
                 'max_steps': steps_per_batch,
                 'params': params
             }
             for w_idx in range(n_workers):
-                # Reset the environment if an episode has gone on for a long time
                 msg_pipes[w_idx].send(payload)
 
+            # Get the result from each worker and update the model
             for w_idx in range(n_workers):
                 result = msg_pipes[w_idx].recv()
-
                 if debug:
-                    print(f"State: {result['state']}")
-                    print("\nWorker Agent Grads:")
-                    for key, val in result['grads'].items():
-                        print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+                    _show_grads(result)
 
                 global_agent.set_grads(result['grads'])
                 global_agent.backward()
 
+                # Update counters and print out if necessary
                 total_steps += result['n_steps']
                 ep_reward[w_idx] += result['total_reward']
 
                 if result['terminated']:
                     total_episodes += 1
                     last_reward = ep_reward[w_idx]
-                    avg_reward = avg_decay * avg_reward + (1.0 - avg_decay) * ep_reward[w_idx]
+                    avg_reward = (
+                        avg_decay * avg_reward +
+                        (1.0 - avg_decay) * last_reward
+                    )
+                    solved = avg_reward > solved_thresh
+                    ep_steps[w_idx] = ep_reward[w_idx] = 0
                     if (total_episodes % log_interval) == 0:
                         print(
-                            f'Episode {total_episodes}\tLast reward: {last_reward:.2f}\t'
+                            f'Episode {total_episodes}\t'
+                            f'Last reward: {last_reward:.2f}\t'
                             f'Average reward: {avg_reward:.2f}'
                         )
-                    ep_steps[w_idx] = ep_reward[w_idx] = 0
-                    solved = avg_reward > solved_thresh
-                    if solved:
-                        break
+                if solved:
+                    break
 
             keep_training = (
                 not solved and

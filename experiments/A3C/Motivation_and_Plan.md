@@ -2,7 +2,7 @@
 
 ## Background
 
-Given the issues I ran into with single step neural network based Q-learning and Actor-Critic, I want to try out Asynchronous Advantage Actor-Critic (A3C).
+Given the issues I ran into with single step neural network based Q-learning and Actor-Critic, I want to try out [Asynchronous Advantage Actor-Critic (A3C)](https://arxiv.org/pdf/1602.01783.pdf).
 
 The basic changes to the Actor-Critic Algorithm (and their benefits) are:
 
