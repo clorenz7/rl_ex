@@ -3,9 +3,13 @@ import gymnasium as gym
 import torch
 
 from cor_rl import a3c
+from cor_rl import utils
 
 
 def test_n_step_returns():
+    """
+    Test that n step returns are calcualted as expected
+    """
     rewards = [2, 4, 8, 16, 32]
     gamma = 0.5
 
@@ -19,6 +23,9 @@ def test_n_step_returns():
 
 
 def test_cart_pole_eval():
+    """
+    Test that you can get a single update from an agent
+    """
     render_mode = "human" if False else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
     agent_params = {
@@ -37,6 +44,10 @@ def test_cart_pole_eval():
 
 
 def test_cart_pole_train_pt_rep():
+    """
+    Test that cart pole can be solved similar to PyTorch reference
+    implementation of A2C
+    """
     render_mode = "human" if False else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
     env.reset(seed=543)
@@ -68,6 +79,9 @@ def test_cart_pole_train_pt_rep():
 
 
 def test_cart_pole_train_batched():
+    """
+    Test that cart pole can be solved with small batches of experience
+    """
     render_mode = "human" if False else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
     env.reset(seed=543)
@@ -98,6 +112,9 @@ def test_cart_pole_train_batched():
 
 
 def test_cart_pole_train_arch():
+    """
+    Test that cart pole can be solved with an alternate architecture
+    """
     render_mode = "human" if False else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
     env.reset(seed=543)
@@ -129,6 +146,9 @@ def test_cart_pole_train_arch():
 
 
 def test_cart_pole_train_multi():
+    """
+    Test that multiple agents on a single thread can solve cart pole
+    """
     torch.manual_seed(543)
 
     agent_params = {
@@ -167,9 +187,9 @@ def test_cart_pole_train_multi():
     assert solved
 
 
-def test_cart_pole_a3c():
+def test_cart_pole_train_a3c():
     """
-    Test that the multi-threaded version of the code works
+    Test that the multi-threaded version of the code can solve cart pole
     """
     agent_params = {
         'hidden_sizes': [128],
@@ -188,7 +208,7 @@ def test_cart_pole_a3c():
     env_name = 'CartPole-v1'
     n_workers = 4
 
-    print("")
+    print("")  # For ease of reading
     agent, solved = a3c.train_loop_parallel(
         n_workers, agent_params, train_params, env_name,
         log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
@@ -196,3 +216,20 @@ def test_cart_pole_a3c():
         debug=False
     )
     assert solved
+
+    make_gif = True
+    if make_gif:
+        import os
+        render_mode = "human" if False else 'rgb_array'
+        env = gym.make('CartPole-v1', render_mode=render_mode)
+        env.reset(seed=101)
+        result = a3c.agent_env_task(
+            agent, env, parameters=None, state=None, t_max=1000,
+            output_frames=True
+        )
+
+        file_name = os.path.join(utils.DEFAULT_DIR, "a3c_cart_pole.gif")
+        utils.write_gif(result['frames'][::5], file_name, duration=1)
+
+
+

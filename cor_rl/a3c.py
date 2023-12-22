@@ -227,7 +227,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.optimizer.zero_grad()
 
 
-def interact(env, agent, t_max=5, state=None, output_gif=False):
+def interact(env, agent, t_max=5, state=None, output_frames=False):
     """
     Does t_max steps of the agent in the environment.
     This is single threaded.
@@ -240,7 +240,7 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
 
     if state is None:
         state, info = env.reset()
-        if output_gif:
+        if output_frames:
             frame_buffer.append(env.render())
 
     while t < t_max and not terminated:
@@ -253,7 +253,7 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
         results.log_probs.append(log_prob)
         results.entropies.append(entropy)
 
-        if output_gif:
+        if output_frames:
             frame_buffer.append(env.render())
         t += 1
 
@@ -271,27 +271,33 @@ def interact(env, agent, t_max=5, state=None, output_gif=False):
     return results, state, terminated, frame_buffer
 
 
-def agent_env_task(agent, env, parameters, state, t_max=5):
+def agent_env_task(agent, env, parameters, state, t_max=5,
+                   output_frames=False):
 
     if parameters is not None:
         agent.set_parameters(parameters)
 
     agent.zero_grad()
 
-    results, state, terminated, _ = interact(
-        env, agent, t_max=t_max, state=state
+    results, state, terminated, frames = interact(
+        env, agent, t_max=t_max, state=state, output_frames=output_frames
     )
 
     # This will run back prop
     grads = agent.get_grads(results)
 
-    return {
+    output = {
         'grads': grads,
         'state': state,
         'total_reward': sum(results.rewards),
         'terminated': terminated,
         'n_steps': len(results.rewards),
     }
+
+    if output_frames:
+        output['frames'] = frames
+
+    return output
 
 
 def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None,
