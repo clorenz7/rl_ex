@@ -1,3 +1,5 @@
+
+import gymnasium as gym
 import torch
 from torch import nn
 
@@ -75,3 +77,10 @@ class OptimizerFactory:
 
 optimizer_factory = OptimizerFactory()
 
+
+class AtariFactory:
+    def get(self, game_name, **kwargs):
+        return gym.make(f"ALE/{game_name}-v5", obs_type='rgb', **kwargs)
+
+
+atari_factory = AtariFactory()
