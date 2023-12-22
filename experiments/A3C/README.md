@@ -18,5 +18,4 @@ I was able to replicate the reference results, as well as see a speedup with mul
 
 ![cartpole_gif](./assets/a3c_cart_pole.gif)
 
-
 The code which achieves all of these results [were written as unit tests](../../tests/test_a3c.py)

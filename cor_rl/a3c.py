@@ -15,7 +15,6 @@ from cor_rl.factories import (
     optimizer_factory,
 )
 
-
 InteractionResult = namedtuple(
     'InteractionResult',
     ['rewards', 'values', 'log_probs', 'entropies'],
@@ -292,7 +291,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
                log_interval=1e9, solved_thresh=None, max_ep_steps=10000, t_max=10000, debug=False,
                avg_decay=0.95):
     """
-    This is a single threaded training loop
+    This is a single threaded (serial) training loop with multiple agents
     """
     start_time = time.time()
 
@@ -401,6 +400,11 @@ def piped_workers(n_workers, worker_func, worker_args):
 
 
 def worker_thread(task_id, conn, agent_params, train_params, env_params):
+    """
+    This is the thread which trains an agent based on messages from the parent.
+    It receives the current global model parameters and
+    returns gradient updates to apply to the global model.
+    """
 
     env_name = env_params['env_name']
     seed = env_params.get('seed', 8888)
@@ -481,6 +485,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                         episode_limit=None, max_steps_per_episode=10000,
                         solved_thresh=None, log_interval=1e9, seed=8888,
                         avg_decay=0.95, debug=False):
+    """
+    Training loop which sets up multiple worker threads which compute
+    gradients in parallel.
+    """
     start_time = time.time()
 
     solved_thresh = solved_thresh or float('inf')
