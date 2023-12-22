@@ -1,5 +1,9 @@
 from collections import namedtuple
+from contextlib import contextmanager
+import multiprocessing
+import time
 
+import gymnasium as gym
 import numpy as np
 import torch
 from torch import nn
@@ -200,10 +204,15 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.optimizer.zero_grad()
 
     def set_parameters(self, state_dict):
+        for key, val in state_dict.items():
+            state_dict[key] = torch.tensor(val)
         self.net.load_state_dict(state_dict)
 
     def get_parameters(self):
-        return self.net.state_dict()
+        state_dict = self.net.state_dict()
+        for key, val in state_dict.items():
+            state_dict[key] = val.tolist()
+        return state_dict
 
     def set_grads(self, grads):
         for name, param in self.net.named_parameters():
@@ -284,16 +293,20 @@ def agent_env_task(agent, env, parameters, state, t_max=5):
 
 
 def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None,
-               log_interval=1e9, solved_thresh=None, max_ep_steps=10000, t_max=10000):
-
+               log_interval=1e9, solved_thresh=None, max_ep_steps=10000, t_max=10000, debug=False):
+    """
+    This is a single threaded training loop
+    """
+    start_time = time.time()
     global EPISODE
 
     solved_thresh = solved_thresh or float('inf')
     total_steps = 0
     n_episodes = 0
     ep_steps, ep_reward = 0, 0
-    avg_reward = 10
+    avg_reward = 0
     beta = 0.05
+    solved = False
 
     n_threads = len(agents)
     states = [None] * n_threads
@@ -301,6 +314,16 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
 
     while total_steps < step_limit and n_episodes < episode_limit:
         params = global_agent.get_parameters()
+        if debug:
+            for key, val in params.items():
+                print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+            w_idx = 0
+            w_params = agents[w_idx].get_parameters()
+            state = states[w_idx]
+            print([] if state is None else state.tolist())
+            for key, val in w_params.items():
+                print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+
         for t_idx in range(n_threads):
             agent = agents[t_idx]
             task_result = agent_env_task(
@@ -328,11 +351,201 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
                     )
                 ep_steps = ep_reward = 0
 
+            if debug:
+                print(f"State: {states[t_idx]}")
+                print("\nWorker Agent Grads:")
+                for key, val in task_result['grads'].items():
+                    print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+
             global_agent.set_grads(task_result['grads'])
             global_agent.backward()
 
         if avg_reward > solved_thresh:
             print(f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\tAverage reward: {avg_reward:.2f}')
             print("PROBLEM SOLVED!")
+            solved = True
             break
 
+    print(f"Finished in {time.time() - start_time:0.1f}sec")
+
+    return global_agent, solved
+
+
+@contextmanager
+def managed_piped_workers(n_workers, worker_func, worker_args):
+
+    parent_conns, child_conns = [], []
+    worker_processes = []
+
+    for i in range(n_workers):
+        parent_conn, child_conn = multiprocessing.Pipe()
+        parent_conns.append(parent_conn)
+        child_conns.append(child_conn)
+
+        worker_process = multiprocessing.Process(
+            target=worker_func,
+            args=[i, child_conn, *worker_args]
+        )
+        worker_processes.append(worker_process)
+        worker_process.start()
+
+    try:
+        yield parent_conns
+    finally:
+        for i in range(n_workers):
+            worker_processes[i].terminate()
+            parent_conns[i].close()
+            child_conns[i].close()
+
+
+def worker_task(task_id, conn, agent_params, train_params, env_params):
+
+    env_name = env_params['env_name']
+    seed = env_params.get('seed', 8888)
+    max_steps_per_episode = env_params.get('max_steps_per_episode', 1e9)
+    env = gym.make(env_name)
+    ep_steps = 0
+    if seed:
+        task_seed = seed + task_id * 10
+        env.reset(seed=task_seed)
+        torch.manual_seed(task_seed)
+    state = None  # Force reset to match other work
+
+    agent = AdvantageActorCriticAgent(agent_params, train_params)
+    torch.manual_seed(task_seed)
+
+    while True:
+        # Receive a task from the parent process
+        task = conn.recv()
+
+        if task.get('msg', '') == 'params':
+            params = agent.get_parameters()
+            params['seed'] = [task_seed, seed]
+            params['state'] = [] if state is None else state.tolist()
+            conn.send(params)
+
+        if task.get('msg', '') == 'state':
+            conn.send([] if state is None else state.tolist())
+
+        if task.get('msg', '') == 'train':
+            # Allow controller to reset the environment
+            if task.get('reset', False):
+                state = None
+
+            result = agent_env_task(
+                agent, env, task['params'], state,
+                t_max=task['max_steps']
+            )
+            state = result['state']
+            ep_steps += result['n_steps']
+            if ep_steps >= max_steps_per_episode:
+                state = None
+                result['terminated'] = True
+
+            if result['terminated']:
+                ep_steps = 0
+
+            conn.send(result)
+
+        if task.get('msg', '') == 'MARCO':
+            conn.send({'polo': state.tolist()})
+
+        if task.get('msg', '') == 'STOP':
+            conn.send("FINISH HIM!")
+            break
+
+
+def train_loop_parallel(n_workers, agent_params, train_params, env_name, steps_per_batch=5,
+                        total_step_limit=10000, episode_limit=None, max_steps_per_episode=10000,
+                        solved_thresh=None, log_interval=1e9, seed=8888, avg_decay=0.95,
+                        debug=False):
+    start_time = time.time()
+
+    solved_thresh = solved_thresh or float('inf')
+    total_steps = 0
+    total_episodes = 0
+    ep_steps, ep_reward = [0]*n_workers, [0]*n_workers
+    avg_reward = 0
+    solved = False
+    episode_limit = episode_limit or 1e9
+    keep_training = True
+
+    env_params = {
+        'env_name': env_name,
+        'seed': seed,
+        'max_steps_per_episode': max_steps_per_episode,
+    }
+
+    worker_args = [agent_params, train_params, env_params]
+    if seed:
+        torch.manual_seed(seed)
+
+    global_agent = AdvantageActorCriticAgent(agent_params, train_params)
+
+    with managed_piped_workers(n_workers, worker_task, worker_args) as msg_pipes:
+        while keep_training:
+            params = global_agent.get_parameters()
+            if debug:
+                print("Global Agent Params:")
+                for key, val in params.items():
+                    print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+                w_idx = 0
+                msg_pipes[w_idx].send({'msg': 'params'})
+                w_params = msg_pipes[w_idx].recv()
+                for key, val in w_params.items():
+                    print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+
+            payload = {
+                'msg': 'train',
+                'max_steps': steps_per_batch,
+                'params': params
+            }
+            for w_idx in range(n_workers):
+                # Reset the environment if an episode has gone on for a long time
+                msg_pipes[w_idx].send(payload)
+
+            for w_idx in range(n_workers):
+                result = msg_pipes[w_idx].recv()
+
+                if debug:
+                    print(f"State: {result['state']}")
+                    print("\nWorker Agent Grads:")
+                    for key, val in result['grads'].items():
+                        print(f'{key}: {torch.tensor(val).flatten()[:2]}')
+
+                global_agent.set_grads(result['grads'])
+                global_agent.backward()
+
+                total_steps += result['n_steps']
+                ep_reward[w_idx] += result['total_reward']
+
+                if result['terminated']:
+                    total_episodes += 1
+                    last_reward = ep_reward[w_idx]
+                    avg_reward = avg_decay * avg_reward + (1.0 - avg_decay) * ep_reward[w_idx]
+                    if (total_episodes % log_interval) == 0:
+                        print(
+                            f'Episode {total_episodes}\tLast reward: {last_reward:.2f}\t'
+                            f'Average reward: {avg_reward:.2f}'
+                        )
+                    ep_steps[w_idx] = ep_reward[w_idx] = 0
+                    solved = avg_reward > solved_thresh
+                    if solved:
+                        break
+
+            keep_training = (
+                not solved and
+                total_steps < total_step_limit and
+                total_episodes < episode_limit
+            )
+
+    if solved:
+        print(
+            f'Episode {total_episodes}\tLast reward: {last_reward:.2f}\t'
+            f'Average reward: {avg_reward:.2f}'
+        )
+        print("PROBLEM SOLVED!")
+
+    print(f"Finished in {time.time() - start_time:0.1f}sec")
+
+    return global_agent, solved
