@@ -8,7 +8,7 @@ LUM_COEFFS = np.array([0.299, 0.587, 0.114])
 
 
 class PolicyValueImageNetwork(nn.Module):
-    def __init__(self, image_size, n_actions):
+    def __init__(self, n_actions, image_size):
         # Image size: 84 x 84 x 1
         n_channels = 1  # Might be 4 frames stacked together?
         n_filters_1 = 16

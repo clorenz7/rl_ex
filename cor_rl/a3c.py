@@ -14,6 +14,8 @@ from cor_rl.factories import (
     ffw_factory,
     optimizer_factory,
 )
+from cor_rl.atari import PolicyValueImageNetwork
+
 
 InteractionResult = namedtuple(
     'InteractionResult',
@@ -133,7 +135,7 @@ class AdvantageActorCriticAgent(BaseAgent):
                 self.n_state, self.n_actions, self.hidden_sizes
             )
         elif self.input_type == 'image':
-            pass
+            self.net = PolicyValueImageNetwork(self.n_actions)
         else:
             raise ValueError(f"{self.input_type} not a valid input type!")
 
