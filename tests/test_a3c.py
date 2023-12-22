@@ -4,6 +4,7 @@ import torch
 
 from cor_rl import a3c
 
+
 def test_n_step_returns():
     rewards = [2, 4, 8, 16, 32]
     gamma = 0.5
@@ -18,7 +19,7 @@ def test_n_step_returns():
 
 
 def test_cart_pole_eval():
-    render_mode = "human" if True else 'rgb_array'
+    render_mode = "human" if False else 'rgb_array'
     env = gym.make('CartPole-v1', render_mode=render_mode)
     agent_params = {
         'hidden_sizes': [128],
@@ -31,6 +32,8 @@ def test_cart_pole_eval():
     agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
 
     result = a3c.agent_env_task(agent, env, parameters=None, state=None)
+    # Just make sure that we can evaluate the agent and get grads
+    assert 'grads' in result
 
 
 def test_cart_pole_train_pt_rep():
@@ -41,7 +44,6 @@ def test_cart_pole_train_pt_rep():
 
     agent_params = {
         'hidden_sizes': [128],
-        # 'hidden_sizes': [24, 24],
         'n_actions': 2,
         'n_state': 4,
         'gamma': 0.99,
@@ -57,11 +59,12 @@ def test_cart_pole_train_pt_rep():
     torch.manual_seed(543)
     agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
 
-    a3c.train_loop(
+    agent, solved = a3c.train_loop(
         global_agent, agents, [env],
-        step_limit=1e9, episode_limit=2000, log_interval=10,
+        step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=env.spec.reward_threshold
     )
+    assert solved
 
 
 def test_cart_pole_train_batched():
@@ -89,7 +92,7 @@ def test_cart_pole_train_batched():
 
     a3c.train_loop(
         global_agent, agents, [env],
-        step_limit=1e9, episode_limit=2000, log_interval=10,
+        step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=env.spec.reward_threshold, t_max=5
     )
 
@@ -101,7 +104,6 @@ def test_cart_pole_train_arch():
     torch.manual_seed(543)
 
     agent_params = {
-        # 'hidden_sizes': [128],
         'hidden_sizes': [32, 32],
         'n_actions': 2,
         'n_state': 4,
@@ -118,11 +120,13 @@ def test_cart_pole_train_arch():
     torch.manual_seed(543)
     agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
 
-    a3c.train_loop(
+    agent, solved = a3c.train_loop(
         global_agent, agents, [env],
-        step_limit=1e9, episode_limit=2000, log_interval=10,
+        step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=env.spec.reward_threshold, t_max=1250
     )
+    assert solved
+
 
 def test_cart_pole_train_multi():
     torch.manual_seed(543)
@@ -156,11 +160,10 @@ def test_cart_pole_train_multi():
 
     agent, solved = a3c.train_loop(
         global_agent, agents, envs,
-        step_limit=1e9, episode_limit=2000, log_interval=10,
+        step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=envs[0].spec.reward_threshold, t_max=5,
         debug=False
     )
-
     assert solved
 
 
@@ -185,12 +188,11 @@ def test_cart_pole_a3c():
     env_name = 'CartPole-v1'
     n_workers = 4
 
+    print("")
     agent, solved = a3c.train_loop_parallel(
         n_workers, agent_params, train_params, env_name,
-        log_interval=10, seed=543, total_step_limit=1e9, episode_limit=2000,
+        log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
         solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
         debug=False
     )
-
     assert solved
-

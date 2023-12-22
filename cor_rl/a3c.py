@@ -204,14 +204,16 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.optimizer.zero_grad()
 
     def set_parameters(self, state_dict):
+        tensor_state = {}
         for key, val in state_dict.items():
-            state_dict[key] = torch.tensor(val)
-        self.net.load_state_dict(state_dict)
+            tensor_state[key] = torch.tensor(val)
+        self.net.load_state_dict(tensor_state)
 
     def get_parameters(self):
         state_dict = self.net.state_dict()
         for key, val in state_dict.items():
             state_dict[key] = val.tolist()
+
         return state_dict
 
     def set_grads(self, grads):
@@ -362,11 +364,12 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
 
         if avg_reward > solved_thresh:
             print(f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\tAverage reward: {avg_reward:.2f}')
-            print("PROBLEM SOLVED!")
+            print(f"PROBLEM SOLVED in {time.time() - start_time:0.1f}sec")
             solved = True
             break
 
-    print(f"Finished in {time.time() - start_time:0.1f}sec")
+    if not solved:
+        print(f"Finished in {time.time() - start_time:0.1f}sec")
 
     return global_agent, solved
 
@@ -544,8 +547,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name, steps_p
             f'Episode {total_episodes}\tLast reward: {last_reward:.2f}\t'
             f'Average reward: {avg_reward:.2f}'
         )
-        print("PROBLEM SOLVED!")
-
-    print(f"Finished in {time.time() - start_time:0.1f}sec")
+        print(f"PROBLEM SOLVED in {time.time() - start_time:0.1f} sec!")
+    else:
+        print(f"Aborted after {time.time() - start_time:0.1f}sec")
 
     return global_agent, solved
