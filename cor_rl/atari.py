@@ -7,6 +7,8 @@ from torch import nn
 
 LUM_COEFFS = np.array([0.299, 0.587, 0.114])
 
+import matplotlib.pyplot as plt
+
 
 class PolicyValueImageNetwork(nn.Module):
     def __init__(self, n_actions, n_channels=4):
@@ -50,15 +52,33 @@ class PolicyValueImageNetwork(nn.Module):
         return action_probs, value_est
 
 
-def preprocess_frames(frame, prev_frame, out_size=(84, 84)):
-    composite_frame = np.zeros(frame.shape)
+def preprocess_frames(frame, prev_frame, trim_x=0, out_size=(84, 84)):
+    composite_frame = np.zeros(frame.shape, dtype=frame.dtype)
     for c in range(3):
         np.maximum(
             frame[:, :, c], prev_frame[:, :, c],
             out=composite_frame[:, :, c]
         )
+    # avg_frame = ((frame.astype(float) + prev_frame.astype(float))/2).astype(np.uint8)
 
     luminance_frame = np.dot(composite_frame, LUM_COEFFS)
+
+    # plt.subplot(2,2,1);
+    # plt.title('Prev')
+    # plt.imshow(prev_frame);
+    # plt.subplot(2,2,2);
+    # plt.title('Current')
+    # plt.imshow(frame);
+    # plt.subplot(2,2,3);
+    # plt.title('Composite')
+    # plt.imshow(composite_frame);
+    # plt.subplot(2,2,4);
+    # plt.title('Lum')
+    # plt.imshow(luminance_frame);
+    # plt.show()
+
+    if trim_x:
+        luminance_frame = luminance_frame[:, trim_x:-trim_x]
 
     out_frame = skimage.transform.resize(luminance_frame, out_size)
     out_frame /= 255.0
@@ -72,29 +92,43 @@ class AtariEnvWrapper:
     Implements frame averaging & stacking, action reptition, and reward clipping
     """
 
-    def __init__(self, game_name, n_repeat=4, reward_clip=1.0, **kwargs):
-        self.env = gym.make(game_name, obs_type='rgb', **kwargs)
+    def __init__(self, game_name, n_repeat=4, reward_clip=1.0, trim_x=0, **kwargs):
+        self.env = gym.make(game_name, obs_type='rgb', frameskip=1, **kwargs)
         self.n_repeat = n_repeat
         self.frame_buffer = []
         self.reward_clip = reward_clip
+        self.num_lives = 0
+        self.trim_x = trim_x
 
     def step(self, action):
         reward_buffer = []
         for i in range(self.n_repeat):
             frame, reward, terminated, trunc, info = self.env.step(action)
             self.frame_buffer.append(frame)
-            reward_buffer.append(
-                min(max(reward, -self.reward_clip), self.reward_clip)
-            )
+
+            if self.reward_clip:
+                reward = min(max(reward, -self.reward_clip), self.reward_clip)
+            reward_buffer.append(reward)
+
+            # Detect a lost life and end the episode
+            current_lives = info.get('lives', 0)
+            lost_a_life = current_lives != self.num_lives
+            self.num_lives = current_lives
             if terminated:
+                break
+            if lost_a_life:
+                # Start the next life to initialize the frame buffer
+                frame, _, _, _, _ = self.env.step(action)
+                self.frame_buffer = [frame]
                 break
 
         frames = []
-        if not terminated:
+        if not (terminated or lost_a_life):
             # Pre-process and stack frames for the model
             for i in range(self.n_repeat):
                 frame = preprocess_frames(
-                    self.frame_buffer[i], self.frame_buffer[i+1]
+                    self.frame_buffer[i+1], self.frame_buffer[i],
+                    trim_x=self.trim_x
                 )
                 frames.append(frame)
 
@@ -103,6 +137,7 @@ class AtariEnvWrapper:
             self.frame_buffer = self.frame_buffer[-1:]
 
         # TODO: Is clipping done here or frame by frame?
+        # Hypothesis: can't score more than once in a small interval of frames.
         total_reward = sum(reward_buffer)
 
         return frames, total_reward, terminated, trunc, info
@@ -110,6 +145,7 @@ class AtariEnvWrapper:
     def reset(self, seed=None):
         # Reset the env and save initial frame
         frame, info = self.env.reset(seed=seed)
+        self.num_lives = info.get('lives', 0)
         self.frame_buffer = [frame]
         # Repeat the frame N times to run through the model
         start_frame = preprocess_frames(frame, frame)
