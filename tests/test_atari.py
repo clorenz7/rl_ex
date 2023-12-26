@@ -22,7 +22,10 @@ def test_frame_preprocessing():
     assert comp_frame.std() > 27.0/255
 
 
-def test_space_invaders():
+def test_atari_env_wrapper():
+    """
+    Test wrapper around Atari env which stacks and preprocesses frames
+    """
     env = factories.environment_factory.get("ALE/SpaceInvaders-v5")
     # Check that wrapper gets the action space and spec properly
     assert env.action_space.n == 6
@@ -70,7 +73,6 @@ def test_atari_net():
 
     net = atari.PolicyValueImageNetwork(env.action_space.n)
 
-    init_frame = init_frame.unsqueeze(0)
     action_probs, value_est = net.forward(init_frame)
 
     assert action_probs.numel() == env.action_space.n

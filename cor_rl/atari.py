@@ -28,7 +28,7 @@ class PolicyValueImageNetwork(nn.Module):
             nn.ReLU(),
             nn.Conv2d(n_filters_1, n_filters_2, filter_size_2, stride_2),
             nn.ReLU(),
-            nn.Flatten(),
+            nn.Flatten(start_dim=0),  # Not doing batches
             nn.Linear(n_features, n_hidden),
             nn.ReLU(),
         )
@@ -40,6 +40,9 @@ class PolicyValueImageNetwork(nn.Module):
         self.value_head = nn.Linear(n_hidden, 1)
 
     def forward(self, x):
+        """
+        x shape: n_frames x 84 x 84
+        """
         x = self.base_net(x)
         action_probs = self.policy_head(x)
         value_est = self.value_head(x)
