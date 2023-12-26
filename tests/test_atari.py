@@ -31,9 +31,9 @@ def test_space_invaders():
     init_frame, info = env.reset(seed=10101)
 
     # Check that initial frame is correct  shape and repeated
-    assert init_frame.shape == (84, 84, 4)
+    assert init_frame.shape == (4, 84, 84)
     assert torch.allclose(
-        init_frame[:, :, 0], init_frame[:, :, 3],
+        init_frame[0, :, :], init_frame[3, :, :],
         rtol=1e-4, atol=1e-4
     )
     # Check that preprocessing is correct
@@ -43,7 +43,7 @@ def test_space_invaders():
 
     # Check that we can perform an action
     frames, reward, terminated, trunc, info = env.step(RIGHT_FIRE)
-    assert frames.shape == (84, 84, 4)
+    assert frames.shape == (4, 84, 84)
     assert reward == 0
     assert terminated is False
 
@@ -54,9 +54,26 @@ def test_space_invaders():
         total_reward += reward
         frames, reward, terminated, trunc, info = env.step(RIGHT_FIRE)
 
-    frame_diff = frames[:, :, 3] - frames[:, :, 0]
+    frame_diff = frames[3, :, :] - frames[0, :, :]
 
     assert total_reward > 0
     assert frame_diff.std() > 0.01
     assert terminated is False
+
+
+def test_atari_net():
+    """
+    Test that the network can process the stacked frames
+    """
+    env = factories.environment_factory.get("ALE/SpaceInvaders-v5")
+    init_frame, info = env.reset(seed=10101)
+
+    net = atari.PolicyValueImageNetwork(env.action_space.n)
+
+    init_frame = init_frame.unsqueeze(0)
+    action_probs, value_est = net.forward(init_frame)
+
+    assert action_probs.numel() == env.action_space.n
+    assert abs(action_probs.sum().item() - 1.0) < 1e-7
+    assert value_est.numel() == 1
 

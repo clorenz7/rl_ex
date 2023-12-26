@@ -9,9 +9,9 @@ LUM_COEFFS = np.array([0.299, 0.587, 0.114])
 
 
 class PolicyValueImageNetwork(nn.Module):
-    def __init__(self, n_actions, image_size):
-        # Image size: 84 x 84 x 1
-        n_channels = 4
+    def __init__(self, n_actions, n_channels=4):
+        super().__init__()
+        # Image size: 84 x 84 x n_channels
         n_filters_1 = 16
         filter_size_1 = (8, 8)
         stride_1 = 4
@@ -20,7 +20,7 @@ class PolicyValueImageNetwork(nn.Module):
         filter_size_2 = (4, 4)
         stride_2 = 2
 
-        n_features = 8 * 8
+        n_features = 9 * 9 * n_filters_2
         n_hidden = 256
 
         self.base_net = nn.Sequential(
@@ -95,7 +95,7 @@ class AtariEnvWrapper:
                 )
                 frames.append(frame)
 
-            frames = torch.dstack(frames)
+            frames = torch.dstack(frames).permute(2, 0, 1)
             # Keep last frame to do the average next time
             self.frame_buffer = self.frame_buffer[-1:]
 
@@ -110,7 +110,7 @@ class AtariEnvWrapper:
         self.frame_buffer = [frame]
         # Repeat the frame N times to run through the model
         start_frame = preprocess_frames(frame, frame)
-        frames = torch.dstack([start_frame]*self.n_repeat)
+        frames = torch.dstack([start_frame]*self.n_repeat).permute(2, 0, 1)
 
         return frames, info
 
