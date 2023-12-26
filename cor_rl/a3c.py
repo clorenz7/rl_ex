@@ -13,6 +13,7 @@ import torch.nn.functional as F
 from cor_rl.factories import (
     ffw_factory,
     optimizer_factory,
+    environment_factory,
 )
 from cor_rl.atari import PolicyValueImageNetwork
 
@@ -48,13 +49,17 @@ class PolicyValueNetwork(nn.Module):
         return action_probs, value_est
 
 
-def calc_n_step_returns(rewards, last_value_est, gamma):
+def calc_n_step_returns(rewards, last_value_est, gamma, reward_clip=None):
 
     n_steps = len(rewards)
     n_step_returns = [0] * n_steps
     last_return = last_value_est
     for step_idx in reversed(range(n_steps)):
-        last_return = rewards[step_idx] + gamma * last_return
+        reward = rewards[step_idx]
+        # Mnih paper clipped rewards to +-1 to account for different game scales
+        if reward_clip is not None:
+            reward = max(min(reward, reward_clip), -reward_clip)
+        last_return = reward + gamma * last_return
         n_step_returns[step_idx] = last_return
 
     return n_step_returns
@@ -71,6 +76,7 @@ class BaseAgent:
         self.n_actions = agent_params.get('n_actions')
         self.n_state = agent_params.get('n_state')
         self.grad_clip = self.agent_params.get('grad_clip', 1.0) or 0.0
+        self.reward_clip = self.agent_params.get('reward_clip')
         self.entropy_weight = self.agent_params.get('entropy_weight', 0.01)
         if self.min_vals and self.max_vals:
             self.mu = (
@@ -151,7 +157,7 @@ class AdvantageActorCriticAgent(BaseAgent):
 
     def calculate_loss(self, results):
         n_step_returns = calc_n_step_returns(
-            results.rewards, results.values[-1], self.gamma
+            results.rewards, results.values[-1], self.gamma, self.reward_clip
         )
         n_step_returns = torch.tensor(n_step_returns).to(self.device)
 
@@ -417,7 +423,7 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params):
     env_name = env_params['env_name']
     seed = env_params.get('seed', 8888)
     max_steps_per_episode = env_params.get('max_steps_per_episode', 1e9)
-    env = gym.make(env_name)
+    env = environment_factory.get(env_name)
     ep_steps = 0
     if seed:
         task_seed = seed + task_id * 10

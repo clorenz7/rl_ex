@@ -1,7 +1,8 @@
 
+import gymnasium as gym
 import numpy as np
-
 import skimage
+import torch
 from torch import nn
 
 LUM_COEFFS = np.array([0.299, 0.587, 0.114])
@@ -10,7 +11,7 @@ LUM_COEFFS = np.array([0.299, 0.587, 0.114])
 class PolicyValueImageNetwork(nn.Module):
     def __init__(self, n_actions, image_size):
         # Image size: 84 x 84 x 1
-        n_channels = 1  # Might be 4 frames stacked together?
+        n_channels = 4
         n_filters_1 = 16
         filter_size_1 = (8, 8)
         stride_1 = 4
@@ -59,4 +60,64 @@ def preprocess_frames(frame, prev_frame, out_size=(84, 84)):
     out_frame = skimage.transform.resize(luminance_frame, out_size)
     out_frame /= 255.0
 
-    return out_frame
+    return torch.from_numpy(out_frame).float()
+
+
+class AtariEnvWrapper:
+    """
+    Wrapper around Atari games. Maintains API from gymnasium
+    Implements frame averaging & stacking, action reptition, and reward clipping
+    """
+
+    def __init__(self, game_name, n_repeat=4, reward_clip=1.0, **kwargs):
+        self.env = gym.make(game_name, obs_type='rgb', **kwargs)
+        self.n_repeat = n_repeat
+        self.frame_buffer = []
+        self.reward_clip = reward_clip
+
+    def step(self, action):
+        reward_buffer = []
+        for i in range(self.n_repeat):
+            frame, reward, terminated, trunc, info = self.env.step(action)
+            self.frame_buffer.append(frame)
+            reward_buffer.append(
+                min(max(reward, -self.reward_clip), self.reward_clip)
+            )
+            if terminated:
+                break
+
+        frames = []
+        if not terminated:
+            # Pre-process and stack frames for the model
+            for i in range(self.n_repeat):
+                frame = preprocess_frames(
+                    self.frame_buffer[i], self.frame_buffer[i+1]
+                )
+                frames.append(frame)
+
+            frames = torch.dstack(frames)
+            # Keep last frame to do the average next time
+            self.frame_buffer = self.frame_buffer[-1:]
+
+        # TODO: Is clipping done here or frame by frame?
+        total_reward = sum(reward_buffer)
+
+        return frames, total_reward, terminated, trunc, info
+
+    def reset(self, seed=None):
+        # Reset the env and save initial frame
+        frame, info = self.env.reset(seed=seed)
+        self.frame_buffer = [frame]
+        # Repeat the frame N times to run through the model
+        start_frame = preprocess_frames(frame, frame)
+        frames = torch.dstack([start_frame]*self.n_repeat)
+
+        return frames, info
+
+    @property
+    def action_space(self):
+        return self.env.action_space
+
+    @property
+    def spec(self):
+        return self.env.spec

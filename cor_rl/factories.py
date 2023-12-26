@@ -78,9 +78,16 @@ class OptimizerFactory:
 optimizer_factory = OptimizerFactory()
 
 
-class AtariFactory:
+from cor_rl.atari import AtariEnvWrapper
+
+
+class EnvironmentFactory:
+
     def get(self, game_name, **kwargs):
-        return gym.make(f"ALE/{game_name}-v5", obs_type='rgb', **kwargs)
+        if game_name.startswith("ALE/"):
+            return AtariEnvWrapper(game_name, **kwargs)
+        else:
+            return gym.make(game_name, **kwargs)
 
 
-atari_factory = AtariFactory()
+environment_factory = EnvironmentFactory()
