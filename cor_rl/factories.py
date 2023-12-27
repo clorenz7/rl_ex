@@ -91,7 +91,7 @@ class EnvironmentFactory:
             if self.use_gym_atari_wrapper:
                 env = gym.make(game_name, obs_type='rgb', frameskip=1, **kwargs)
                 return gym.wrappers.AtariPreprocessing(
-                    env, scale_obs=True
+                    env, scale_obs=True, **kwargs
                 )
 
             else:

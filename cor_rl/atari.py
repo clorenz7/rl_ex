@@ -7,8 +7,6 @@ from torch import nn
 
 LUM_COEFFS = np.array([0.299, 0.587, 0.114])
 
-import matplotlib.pyplot as plt
-
 
 class PolicyValueImageNetwork(nn.Module):
     def __init__(self, n_actions, n_channels=4):
@@ -59,23 +57,7 @@ def preprocess_frames(frame, prev_frame, trim_x=0, out_size=(84, 84)):
             frame[:, :, c], prev_frame[:, :, c],
             out=composite_frame[:, :, c]
         )
-    # avg_frame = ((frame.astype(float) + prev_frame.astype(float))/2).astype(np.uint8)
-
     luminance_frame = np.dot(composite_frame, LUM_COEFFS)
-
-    # plt.subplot(2,2,1);
-    # plt.title('Prev')
-    # plt.imshow(prev_frame);
-    # plt.subplot(2,2,2);
-    # plt.title('Current')
-    # plt.imshow(frame);
-    # plt.subplot(2,2,3);
-    # plt.title('Composite')
-    # plt.imshow(composite_frame);
-    # plt.subplot(2,2,4);
-    # plt.title('Lum')
-    # plt.imshow(luminance_frame);
-    # plt.show()
 
     if trim_x:
         luminance_frame = luminance_frame[:, trim_x:-trim_x]

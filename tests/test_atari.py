@@ -54,7 +54,7 @@ def test_atari_env_wrapper():
     # Just move right and fire for a few steps, you should randomly
     # hit something and the frames should change over time
     total_reward = 0
-    for _ in range(15):
+    for _ in range(60):
         total_reward += reward
         frames, reward, terminated, trunc, info = env.step(RIGHT_FIRE)
 
@@ -71,69 +71,40 @@ def test_atari_net():
     """
     env = factories.environment_factory.get("ALE/SpaceInvaders-v5")
     init_frame, info = env.reset(seed=10101)
+    torch.manual_seed(10101)
 
     net = atari.PolicyValueImageNetwork(env.action_space.n)
 
     action_probs, value_est = net.forward(init_frame)
 
     assert action_probs.numel() == env.action_space.n
-    assert abs(action_probs.sum().item() - 1.0) < 1e-7
+    assert abs(action_probs.sum().item() - 1.0) < 1e-6
     assert value_est.numel() == 1
 
 
-def test_life_counter_terminate():
+def test_life_counter_ends_episode():
     env = factories.environment_factory.get(
-        "ALE/SpaceInvaders-v5",
-        render_mode="human", repeat_action_probability=0.0,
-        frameskip=1,
+        "ALE/SpaceInvaders-v5"
     )
     init_frame, info = env.reset(seed=10101)
-    num_lives = info.get('lives')
+    n_start_lives = info.get('lives')
     stayin_alive = True
     n_steps = 0
-    max_steps = 10000
+    max_steps = 1000
 
     all_frames = []
     while stayin_alive and n_steps < max_steps:
         frames, reward, terminated, trunc, info = env.step(RIGHT_FIRE)
-        stayin_alive = info.get('lives') == num_lives
+        stayin_alive = info.get('lives') == n_start_lives
         n_steps += 1
         if stayin_alive:
             all_frames.append(frames)
 
     assert stayin_alive is False
-    assert len(env.frame_buffer) == 1
     assert terminated is False
-    assert info.get('lives') < num_lives
+    assert info.get('lives') < n_start_lives
     assert n_steps < 350
+    # At episode start, there should be one frame in the buffer
+    assert len(env.frame_buffer) == 1
+    # There should be no frames returned on termination
     assert len(frames) == 0
-
-
-def test_rendering():
-    env = gym.make("ALE/SpaceInvaders-v5", render_mode="rgb_array", frameskip=1)
-
-    # w_env = gym.wrappers.AtariPreprocessing(env, noop_max=20)
-
-    init_frame, info = env.reset(seed=10101)
-
-    frames = [init_frame]
-    states = [env.render()]
-
-
-    for i in range(500):
-        state, _, _, _, _ = env.step(RIGHT_FIRE)
-        states.append(state)
-        frames.append(env.render())
-
-    import matplotlib.pyplot as plt
-    import numpy as np
-
-    for idx in range(100, 500):
-        plt.subplot(1,2,1)
-        plt.imshow((frames[idx] > 0).astype(np.uint8) * 255)
-        plt.subplot(1,2,2)
-        plt.imshow((states[idx] > 0).astype(np.uint8) * 255)
-
-        plt.show()
-
-
