@@ -5,6 +5,7 @@ import torch
 from cor_rl.agents import a2c
 from cor_rl import a3c
 from cor_rl import utils
+import cor_rl.agents
 
 
 def test_n_step_returns():
@@ -61,15 +62,16 @@ def test_cart_pole_train_pt_rep():
         'gamma': 0.99,
         'entropy_weight': 0.00,
         'grad_clip': 2.0,
+        'type': 'a2c-ffw',
     }
     train_params = {
         'optimizer': 'adamw',
         'lr': 3e-3,
         'weight_decay': 0.0,
     }
-    global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+    global_agent = cor_rl.agents.factory(agent_params, train_params)
     torch.manual_seed(543)
-    agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
+    agents = [cor_rl.agents.factory(agent_params, train_params)]
 
     agent, solved = a3c.train_loop(
         global_agent, agents, [env],
@@ -95,15 +97,16 @@ def test_cart_pole_train_batched():
         'gamma': 0.99,
         'entropy_weight': 0.00,
         'grad_clip': 2.0,
+        'type': 'a2c-ffw',
     }
     train_params = {
         'optimizer': 'adamw',
         'lr': 1e-3,
         'weight_decay': 0.0,
     }
-    global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+    global_agent = cor_rl.agents.factory(agent_params, train_params)
     torch.manual_seed(543)
-    agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
+    agents = [cor_rl.agents.factory(agent_params, train_params)]
 
     a3c.train_loop(
         global_agent, agents, [env],
@@ -128,15 +131,16 @@ def test_cart_pole_train_arch():
         'gamma': 0.99,
         'entropy_weight': 0.00,
         'grad_clip': 2.0,
+        'type': 'a2c-ffw',
     }
     train_params = {
         'optimizer': 'adamw',
         'lr': 1e-3 * 2,
         'weight_decay': 1e-4,
     }
-    global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+    global_agent = cor_rl.agents.factory(agent_params, train_params)
     torch.manual_seed(543)
-    agents = [a3c.AdvantageActorCriticAgent(agent_params, train_params)]
+    agents = [cor_rl.agents.factory(agent_params, train_params)]
 
     agent, solved = a3c.train_loop(
         global_agent, agents, [env],
@@ -199,6 +203,7 @@ def test_cart_pole_train_a3c():
         'gamma': 0.99,
         'entropy_weight': 0.00,
         'grad_clip': 2.0,
+        'type': 'a2c-ffw',
     }
     train_params = {
         'optimizer': 'adamw',
@@ -231,6 +236,3 @@ def test_cart_pole_train_a3c():
 
         file_name = os.path.join(utils.DEFAULT_DIR, "a3c_cart_pole.gif")
         utils.write_gif(result['frames'][::5], file_name, duration=1)
-
-
-

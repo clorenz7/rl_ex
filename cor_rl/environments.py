@@ -24,5 +24,8 @@ class EnvironmentFactory:
         else:
             return gym.make(game_name, **kwargs)
 
+    def __call__(self, *args, **kwargs):
+        return self.get(*args, **kwargs)
+
 
 factory = EnvironmentFactory()

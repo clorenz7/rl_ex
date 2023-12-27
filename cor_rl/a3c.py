@@ -2,6 +2,9 @@ from contextlib import contextmanager
 import multiprocessing
 import time
 
+import torch
+
+import cor_rl.agents
 from cor_rl import environments
 from cor_rl.agents.a2c import (
     InteractionResult,
@@ -212,7 +215,7 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params):
         torch.manual_seed(task_seed)
     state = None  # Force reset to match previous work
 
-    agent = AdvantageActorCriticAgent(agent_params, train_params)
+    agent = cor_rl.agents.factory(agent_params, train_params)
     torch.manual_seed(task_seed)  # Reset seed to match previous work
 
     while True:
@@ -303,7 +306,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
     # Seed and create the global agent
     if seed:
         torch.manual_seed(seed)
-    global_agent = AdvantageActorCriticAgent(agent_params, train_params)
+    global_agent = cor_rl.agents.factory(agent_params, train_params)
 
     worker_args = [agent_params, train_params, env_params]
     with piped_workers(n_workers, worker_thread, worker_args) as msg_pipes:

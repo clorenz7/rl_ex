@@ -64,7 +64,6 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.device = device
 
         self.hidden_sizes = agent_params.get('hidden_sizes', None)
-        self.input_type = agent_params.get('input_type', 'vector').lower()
 
         self.train_params = train_params
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
@@ -89,15 +88,13 @@ class AdvantageActorCriticAgent(BaseAgent):
     def state_to_features(self, state):
         return self.normalize_state(state)
 
+    def construct_net(self):
+        return PolicyValueNetwork(
+            self.n_state, self.n_actions, self.hidden_sizes
+        )
+
     def reset(self):
-        if self.input_type == 'vector':
-            self.net = PolicyValueNetwork(
-                self.n_state, self.n_actions, self.hidden_sizes
-            )
-        # elif self.input_type == 'image':
-        #     self.net = PolicyValueImageNetwork(self.n_actions)
-        else:
-            raise ValueError(f"{self.input_type} not a valid input type!")
+        self.net = self.construct_net()
 
         self.optimizer = optimizer_factory.get(
             self.optimizer_name, self.train_params, self.net

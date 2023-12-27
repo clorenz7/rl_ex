@@ -17,6 +17,9 @@ class ActivationFactory:
     def get(self, activation_name):
         return self._MAP[activation_name.lower()]()
 
+    def __call__(self, *args, **kwargs):
+        return self.get(*args, **kwargs)
+
 
 activation_factory = ActivationFactory()
 
@@ -72,6 +75,9 @@ class OptimizerFactory:
             raise ValueError("Either net or param_list must be not None!")
 
         return optimizer
+
+    def __call__(self, *args, **kwargs):
+        return self.get(*args, **kwargs)
 
 
 optimizer_factory = OptimizerFactory()
