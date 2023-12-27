@@ -17,216 +17,220 @@ from cor_rl.factories import (
 
 from cor_rl import environments
 from cor_rl.atari import PolicyValueImageNetwork
-
-
-InteractionResult = namedtuple(
-    'InteractionResult',
-    ['rewards', 'values', 'log_probs', 'entropies'],
+from cor_rl.agents.a2c import (
+    InteractionResult,
+    AdvantageActorCriticAgent
 )
 
-EPS = np.finfo(np.float32).eps.item()
+
+# InteractionResult = namedtuple(
+#     'InteractionResult',
+#     ['rewards', 'values', 'log_probs', 'entropies'],
+# )
+
+# EPS = np.finfo(np.float32).eps.item()
 
 
-class PolicyValueNetwork(nn.Module):
+# class PolicyValueNetwork(nn.Module):
 
-    def __init__(self, n_state, n_actions, hidden_layers):
-        super().__init__()
-        layer_sizes = [n_state] + hidden_layers
-        self.base_layer = ffw_factory(layer_sizes, 'relu', 'relu')
+#     def __init__(self, n_state, n_actions, hidden_layers):
+#         super().__init__()
+#         layer_sizes = [n_state] + hidden_layers
+#         self.base_layer = ffw_factory(layer_sizes, 'relu', 'relu')
 
-        n_hidden = hidden_layers[-1]
+#         n_hidden = hidden_layers[-1]
 
-        self.policy_head = nn.Linear(n_hidden, n_actions)
-        self.value_head = nn.Linear(n_hidden, 1)
+#         self.policy_head = nn.Linear(n_hidden, n_actions)
+#         self.value_head = nn.Linear(n_hidden, 1)
 
-    def forward(self, x):
-        x = self.base_layer(x)
+#     def forward(self, x):
+#         x = self.base_layer(x)
 
-        logits = self.policy_head(x)
-        action_probs = F.softmax(logits, dim=-1)
+#         logits = self.policy_head(x)
+#         action_probs = F.softmax(logits, dim=-1)
 
-        value_est = self.value_head(x)
+#         value_est = self.value_head(x)
 
-        return action_probs, value_est
-
-
-def calc_n_step_returns(rewards, last_value_est, gamma, reward_clip=None):
-
-    n_steps = len(rewards)
-    n_step_returns = [0] * n_steps
-    last_return = last_value_est
-    for step_idx in reversed(range(n_steps)):
-        reward = rewards[step_idx]
-        # Mnih paper clipped rewards to +-1 to account for different game scales
-        if reward_clip is not None:
-            reward = max(min(reward, reward_clip), -reward_clip)
-        last_return = reward + gamma * last_return
-        n_step_returns[step_idx] = last_return
-
-    return n_step_returns
+#         return action_probs, value_est
 
 
-class BaseAgent:
+# def calc_n_step_returns(rewards, last_value_est, gamma, reward_clip=None):
 
-    def __init__(self, agent_params):
-        self.agent_params = agent_params or {}
-        self.gamma = self.agent_params.get('gamma', 0.9)
-        self.epsilon = self.agent_params.get('epsilon', 1e-8)
-        self.min_vals = self.agent_params.get('min_vals', None)
-        self.max_vals = self.agent_params.get('max_vals', None)
-        self.n_actions = agent_params.get('n_actions')
-        self.n_state = agent_params.get('n_state')
-        self.grad_clip = self.agent_params.get('grad_clip', 1.0) or 0.0
-        self.reward_clip = self.agent_params.get('reward_clip')
-        self.entropy_weight = self.agent_params.get('entropy_weight', 0.01)
-        if self.min_vals and self.max_vals:
-            self.mu = (
-                torch.tensor(self.max_vals) + torch.tensor(self.min_vals)
-            ) / 2.0
-            self.sigma = (
-                torch.tensor(self.max_vals) - torch.tensor(self.min_vals)
-            ) / 2.0
-        else:
-            self.mu = self.sigma = None
+#     n_steps = len(rewards)
+#     n_step_returns = [0] * n_steps
+#     last_return = last_value_est
+#     for step_idx in reversed(range(n_steps)):
+#         reward = rewards[step_idx]
+#         # Mnih paper clipped rewards to +-1 to account for different game scales
+#         if reward_clip is not None:
+#             reward = max(min(reward, reward_clip), -reward_clip)
+#         last_return = reward + gamma * last_return
+#         n_step_returns[step_idx] = last_return
 
-    def bound(self, state, eps=1e-4):
-        for i in range(len(state)):
-            state[i] = max(
-                min(state[i], self.max_vals[i]-eps),
-                self.min_vals[i] + eps
-            )
-        return state
-
-    def normalize_state(self, state):
-        features = torch.from_numpy(state).float()
-        if self.mu:
-            features = (features - self.mu)/self.sigma
-
-        return features.to(self.device)
+#     return n_step_returns
 
 
-class AdvantageActorCriticAgent(BaseAgent):
-    def __init__(self, agent_params={}, train_params={}, device="cpu"):
-        super().__init__(agent_params)
-        self.device = device
+# class BaseAgent:
 
-        self.hidden_sizes = agent_params.get('hidden_sizes', None)
-        self.input_type = agent_params.get('input_type', 'vector').lower()
+#     def __init__(self, agent_params):
+#         self.agent_params = agent_params or {}
+#         self.gamma = self.agent_params.get('gamma', 0.9)
+#         self.epsilon = self.agent_params.get('epsilon', 1e-8)
+#         self.min_vals = self.agent_params.get('min_vals', None)
+#         self.max_vals = self.agent_params.get('max_vals', None)
+#         self.n_actions = agent_params.get('n_actions')
+#         self.n_state = agent_params.get('n_state')
+#         self.grad_clip = self.agent_params.get('grad_clip', 1.0) or 0.0
+#         self.reward_clip = self.agent_params.get('reward_clip')
+#         self.entropy_weight = self.agent_params.get('entropy_weight', 0.01)
+#         if self.min_vals and self.max_vals:
+#             self.mu = (
+#                 torch.tensor(self.max_vals) + torch.tensor(self.min_vals)
+#             ) / 2.0
+#             self.sigma = (
+#                 torch.tensor(self.max_vals) - torch.tensor(self.min_vals)
+#             ) / 2.0
+#         else:
+#             self.mu = self.sigma = None
 
-        self.train_params = train_params
-        self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
+#     def bound(self, state, eps=1e-4):
+#         for i in range(len(state)):
+#             state[i] = max(
+#                 min(state[i], self.max_vals[i]-eps),
+#                 self.min_vals[i] + eps
+#             )
+#         return state
 
-        self.norm_returns = self.agent_params.get('norm_returns', False)
+#     def normalize_state(self, state):
+#         features = torch.from_numpy(state).float()
+#         if self.mu:
+#             features = (features - self.mu)/self.sigma
 
-        self.reset()
+#         return features.to(self.device)
 
-    def select_action(self, state=None):
-        if state is not None:
-            features = self.state_to_features(state)
 
-        policy, value_est = self.net(features)
+# class AdvantageActorCriticAgent(BaseAgent):
+#     def __init__(self, agent_params={}, train_params={}, device="cpu"):
+#         super().__init__(agent_params)
+#         self.device = device
 
-        pdf = Categorical(policy)
-        action = pdf.sample()
-        log_prob = pdf.log_prob(action)
-        entropy = pdf.entropy()
+#         self.hidden_sizes = agent_params.get('hidden_sizes', None)
+#         self.input_type = agent_params.get('input_type', 'vector').lower()
 
-        return action.item(), value_est, entropy, log_prob
+#         self.train_params = train_params
+#         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
 
-    def state_to_features(self, state):
-        return self.normalize_state(state)
+#         self.norm_returns = self.agent_params.get('norm_returns', False)
 
-    def reset(self):
-        if self.input_type == 'vector':
-            self.net = PolicyValueNetwork(
-                self.n_state, self.n_actions, self.hidden_sizes
-            )
-        elif self.input_type == 'image':
-            self.net = PolicyValueImageNetwork(self.n_actions)
-        else:
-            raise ValueError(f"{self.input_type} not a valid input type!")
+#         self.reset()
 
-        self.optimizer = optimizer_factory.get(
-            self.optimizer_name, self.train_params, self.net
-        )
+#     def select_action(self, state=None):
+#         if state is not None:
+#             features = self.state_to_features(state)
 
-    def checkpoint(self, file_name):
-        torch.save(self.net, file_name)
+#         policy, value_est = self.net(features)
 
-    def load(self, file_name: str):
-        self.net = torch.load(file_name).to(self.device)
+#         pdf = Categorical(policy)
+#         action = pdf.sample()
+#         log_prob = pdf.log_prob(action)
+#         entropy = pdf.entropy()
 
-    def calculate_loss(self, results):
-        n_step_returns = calc_n_step_returns(
-            results.rewards, results.values[-1], self.gamma, self.reward_clip
-        )
-        n_step_returns = torch.tensor(n_step_returns).to(self.device)
+#         return action.item(), value_est, entropy, log_prob
 
-        value_est = torch.hstack(results.values[:-1])
+#     def state_to_features(self, state):
+#         return self.normalize_state(state)
 
-        if self.norm_returns:
-            # Pytorch reference implementation does this, dunno exactly why
-            # But my intuition is that it helps deal with the way
-            # total return increases as algo improves
-            std = n_step_returns.std() + EPS
-            n_step_returns = (n_step_returns - n_step_returns.mean()) / std
+#     def reset(self):
+#         if self.input_type == 'vector':
+#             self.net = PolicyValueNetwork(
+#                 self.n_state, self.n_actions, self.hidden_sizes
+#             )
+#         elif self.input_type == 'image':
+#             self.net = PolicyValueImageNetwork(self.n_actions)
+#         else:
+#             raise ValueError(f"{self.input_type} not a valid input type!")
 
-        if self.grad_clip is None or self.grad_clip <= 0:
-            value_loss = F.mse_loss(value_est, n_step_returns)
-        else:
-            value_loss = F.smooth_l1_loss(
-                value_est, n_step_returns,
-                beta=self.grad_clip, reduction="none"
-            )
+#         self.optimizer = optimizer_factory.get(
+#             self.optimizer_name, self.train_params, self.net
+#         )
 
-        # Advantage is a semi-gradient update
-        advantage = n_step_returns - value_est.detach()
-        policy_loss = -torch.hstack(results.log_probs) * advantage
+#     def checkpoint(self, file_name):
+#         torch.save(self.net, file_name)
 
-        loss = value_loss.sum() + policy_loss.sum()
+#     def load(self, file_name: str):
+#         self.net = torch.load(file_name).to(self.device)
 
-        if self.entropy_weight > 0:
-            entropy_loss = torch.hstack(results.entropies)
-            loss = loss + entropy_loss.sum() * self.entropy_weight
+#     def calculate_loss(self, results):
+#         n_step_returns = calc_n_step_returns(
+#             results.rewards, results.values[-1], self.gamma, self.reward_clip
+#         )
+#         n_step_returns = torch.tensor(n_step_returns).to(self.device)
 
-        return loss
+#         value_est = torch.hstack(results.values[:-1])
 
-    def set_parameters(self, state_dict):
-        tensor_state = {}
-        for key, val in state_dict.items():
-            tensor_state[key] = torch.tensor(val)
-        self.net.load_state_dict(tensor_state)
+#         if self.norm_returns:
+#             # Pytorch reference implementation does this, dunno exactly why
+#             # But my intuition is that it helps deal with the way
+#             # total return increases as algo improves
+#             std = n_step_returns.std() + EPS
+#             n_step_returns = (n_step_returns - n_step_returns.mean()) / std
 
-    def get_parameters(self):
-        state_dict = self.net.state_dict()
-        for key, val in state_dict.items():
-            state_dict[key] = val.tolist()
+#         if self.grad_clip is None or self.grad_clip <= 0:
+#             value_loss = F.mse_loss(value_est, n_step_returns)
+#         else:
+#             value_loss = F.smooth_l1_loss(
+#                 value_est, n_step_returns,
+#                 beta=self.grad_clip, reduction="none"
+#             )
 
-        return state_dict
+#         # Advantage is a semi-gradient update
+#         advantage = n_step_returns - value_est.detach()
+#         policy_loss = -torch.hstack(results.log_probs) * advantage
 
-    def set_grads(self, grads):
-        for name, param in self.net.named_parameters():
-            param.grad = grads[name]
+#         loss = value_loss.sum() + policy_loss.sum()
 
-    def get_grads(self, results: InteractionResult):
-        # Compute the loss
-        loss = self.calculate_loss(results)
-        loss.backward()
+#         if self.entropy_weight > 0:
+#             entropy_loss = torch.hstack(results.entropies)
+#             loss = loss + entropy_loss.sum() * self.entropy_weight
 
-        grads = {}
-        for name, param in self.net.named_parameters():
-            grads[name] = param.grad.detach()
+#         return loss
 
-        return grads
+#     def set_parameters(self, state_dict):
+#         tensor_state = {}
+#         for key, val in state_dict.items():
+#             tensor_state[key] = torch.tensor(val)
+#         self.net.load_state_dict(tensor_state)
 
-    def backward(self):
-        self.optimizer.step()
-        # TODO: Add learning rate scheduler
+#     def get_parameters(self):
+#         state_dict = self.net.state_dict()
+#         for key, val in state_dict.items():
+#             state_dict[key] = val.tolist()
 
-        self.optimizer.zero_grad()
+#         return state_dict
 
-    def zero_grad(self):
-        self.optimizer.zero_grad()
+#     def set_grads(self, grads):
+#         for name, param in self.net.named_parameters():
+#             param.grad = grads[name]
+
+#     def get_grads(self, results: InteractionResult):
+#         # Compute the loss
+#         loss = self.calculate_loss(results)
+#         loss.backward()
+
+#         grads = {}
+#         for name, param in self.net.named_parameters():
+#             grads[name] = param.grad.detach()
+
+#         return grads
+
+#     def backward(self):
+#         self.optimizer.step()
+#         # TODO: Add learning rate scheduler
+
+#         self.optimizer.zero_grad()
+
+#     def zero_grad(self):
+#         self.optimizer.zero_grad()
 
 
 def interact(env, agent, t_max=5, state=None, output_frames=False):
