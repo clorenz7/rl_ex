@@ -3,6 +3,7 @@ import torch
 
 from cor_rl import atari
 from cor_rl import environments
+from cor_rl.agents import atari_a2c
 
 RIGHT_FIRE = 4
 NO_OP = 0
@@ -73,7 +74,7 @@ def test_atari_net():
     init_frame, info = env.reset(seed=10101)
     torch.manual_seed(10101)
 
-    net = atari.PolicyValueImageNetwork(env.action_space.n)
+    net = atari_a2c.Mnih2015PolicyValueNetwork(env.action_space.n)
 
     action_probs, value_est = net.forward(init_frame)
 

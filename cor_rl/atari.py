@@ -3,51 +3,8 @@ import gymnasium as gym
 import numpy as np
 import skimage
 import torch
-from torch import nn
 
 LUM_COEFFS = np.array([0.299, 0.587, 0.114])
-
-
-class PolicyValueImageNetwork(nn.Module):
-    def __init__(self, n_actions, n_channels=4):
-        super().__init__()
-        # Image size: 84 x 84 x n_channels
-        n_filters_1 = 16
-        filter_size_1 = (8, 8)
-        stride_1 = 4
-
-        n_filters_2 = 32
-        filter_size_2 = (4, 4)
-        stride_2 = 2
-
-        n_features = 9 * 9 * n_filters_2
-        n_hidden = 256
-
-        self.base_net = nn.Sequential(
-            nn.Conv2d(n_channels, n_filters_1, filter_size_1, stride_1),
-            nn.ReLU(),
-            nn.Conv2d(n_filters_1, n_filters_2, filter_size_2, stride_2),
-            nn.ReLU(),
-            nn.Flatten(start_dim=0),  # Not doing batches
-            nn.Linear(n_features, n_hidden),
-            nn.ReLU(),
-        )
-
-        self.policy_head = nn.Sequential(
-            nn.Linear(n_hidden, n_actions),
-            nn.Softmax(dim=-1)
-        )
-        self.value_head = nn.Linear(n_hidden, 1)
-
-    def forward(self, x):
-        """
-        x shape: n_frames x 84 x 84
-        """
-        x = self.base_net(x)
-        action_probs = self.policy_head(x)
-        value_est = self.value_head(x)
-
-        return action_probs, value_est
 
 
 def preprocess_frames(frame, prev_frame, trim_x=0, out_size=(84, 84)):
