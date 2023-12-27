@@ -1,8 +1,8 @@
 import gymnasium as gym
 import torch
 
-from cor_rl import factories
 from cor_rl import atari
+from cor_rl import environments
 
 RIGHT_FIRE = 4
 NO_OP = 0
@@ -27,7 +27,7 @@ def test_atari_env_wrapper():
     """
     Test wrapper around Atari env which stacks and preprocesses frames
     """
-    env = factories.environment_factory.get("ALE/SpaceInvaders-v5")
+    env = environments.factory.get("ALE/SpaceInvaders-v5")
     # Check that wrapper gets the action space and spec properly
     assert env.action_space.n == 6
     assert env.spec.reward_threshold is None
@@ -69,7 +69,7 @@ def test_atari_net():
     """
     Test that the network can process the stacked frames
     """
-    env = factories.environment_factory.get("ALE/SpaceInvaders-v5")
+    env = environments.factory.get("ALE/SpaceInvaders-v5")
     init_frame, info = env.reset(seed=10101)
     torch.manual_seed(10101)
 
@@ -83,9 +83,7 @@ def test_atari_net():
 
 
 def test_life_counter_ends_episode():
-    env = factories.environment_factory.get(
-        "ALE/SpaceInvaders-v5"
-    )
+    env = environments.factory.get("ALE/SpaceInvaders-v5")
     init_frame, info = env.reset(seed=10101)
     n_start_lives = info.get('lives')
     stayin_alive = True

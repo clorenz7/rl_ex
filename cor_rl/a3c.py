@@ -13,8 +13,9 @@ import torch.nn.functional as F
 from cor_rl.factories import (
     ffw_factory,
     optimizer_factory,
-    environment_factory,
 )
+
+from cor_rl import environments
 from cor_rl.atari import PolicyValueImageNetwork
 
 
@@ -423,7 +424,7 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params):
     env_name = env_params['env_name']
     seed = env_params.get('seed', 8888)
     max_steps_per_episode = env_params.get('max_steps_per_episode', 1e9)
-    env = environment_factory.get(env_name)
+    env = environments.factory.get(env_name)
     ep_steps = 0
     if seed:
         task_seed = seed + task_id * 10
