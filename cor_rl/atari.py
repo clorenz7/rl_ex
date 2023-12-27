@@ -88,14 +88,16 @@ class AtariEnvWrapper:
     def reset(self, seed=None):
         # Reset the env and save initial frame
         frame, info = self.env.reset(seed=seed)
+        prev_frame = frame
+        self.num_lives = info.get('lives', 0)
 
-        for _ in range(torch.randint(3, 30, [1]).item()):
+        for _ in range(torch.randint(5, 30, [1]).item()):
+            prev_frame = frame
             frame, reward, terminated, trunc, info = self.env.step(NO_OP)
 
-        self.num_lives = info.get('lives', 0)
         self.frame_buffer = [frame]
         # Repeat the frame N times to run through the model
-        start_frame = preprocess_frames(frame, frame)
+        start_frame = preprocess_frames(frame, prev_frame)
         frames = torch.dstack([start_frame]*self.n_repeat).permute(2, 0, 1)
 
         return frames, info

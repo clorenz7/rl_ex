@@ -76,10 +76,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         if state is not None:
             features = self.state_to_features(state)
 
-        try:
-            policy, value_est = self.net(features)
-        except:
-            import ipdb; ipdb.set_trace()
+        policy, value_est = self.net(features)
 
         pdf = Categorical(policy)
         action = pdf.sample()

@@ -33,10 +33,6 @@ def interact(env, agent, t_max=5, state=None, output_frames=False):
         action_idx, value_est, entropy, log_prob = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
 
-        if state is None:
-            # Lost a life: episode restart
-            break
-
         results.rewards.append(reward)
         results.values.append(value_est)
         results.log_probs.append(log_prob)
@@ -44,6 +40,10 @@ def interact(env, agent, t_max=5, state=None, output_frames=False):
 
         if output_frames:
             frame_buffer.append(env.render())
+
+        if state is None:
+            # Lost a life: episode restart
+            break
         t += 1
 
     if terminated:
@@ -74,6 +74,13 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     results, state, terminated, frames = interact(
         env, agent, t_max=t_max, state=state, output_frames=output_frames
     )
+    # # If the only step was losing a life, start the next life
+    # # Since no information was provided
+    # # TODO: Or should you have added a return of 0?
+    # if state is None and len(results.rewards) == 0:
+    #     results, state, terminated, frames = interact(
+    #         env, agent, t_max=t_max, state=state, output_frames=output_frames
+    #     )
 
     # This will run back prop
     grads = agent.get_grads(results)
