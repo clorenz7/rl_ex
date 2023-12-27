@@ -130,6 +130,8 @@ def test_space_invaders_train():
     env_name = 'ALE/SpaceInvaders-v5'
     n_workers = 4
 
+    torch.manual_seed(8888101)
+
     global_agent = cor_rl.agents.factory(agent_params, train_params)
     agents = []
     envs = []
@@ -141,7 +143,7 @@ def test_space_invaders_train():
 
     agent, solved = a3c.train_loop(
         global_agent, agents, envs,
-        log_interval=10, seed=888, total_step_limit=50000,
+        log_interval=10, seed=888, total_step_limit=500000,
         steps_per_batch=5, avg_decay=0.95,
     )
     # print("")  # For ease of reading
