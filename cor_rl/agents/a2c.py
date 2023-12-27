@@ -137,7 +137,7 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         if self.entropy_weight > 0:
             entropy_loss = torch.hstack(results.entropies)
-            loss = loss + entropy_loss.sum() * self.entropy_weight
+            loss = loss - entropy_loss.sum() * self.entropy_weight
 
         return loss
 
