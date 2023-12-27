@@ -65,7 +65,7 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         self.hidden_sizes = agent_params.get('hidden_sizes', None)
 
-        self.train_params = train_params
+        self.train_params = dict(train_params)
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
 
         self.norm_returns = self.agent_params.get('norm_returns', False)
@@ -76,7 +76,10 @@ class AdvantageActorCriticAgent(BaseAgent):
         if state is not None:
             features = self.state_to_features(state)
 
-        policy, value_est = self.net(features)
+        try:
+            policy, value_est = self.net(features)
+        except:
+            import ipdb; ipdb.set_trace()
 
         pdf = Categorical(policy)
         action = pdf.sample()

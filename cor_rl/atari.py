@@ -5,6 +5,7 @@ import skimage
 import torch
 
 LUM_COEFFS = np.array([0.299, 0.587, 0.114])
+NO_OP = 0
 
 
 def preprocess_frames(frame, prev_frame, trim_x=0, out_size=(84, 84)):
@@ -79,11 +80,18 @@ class AtariEnvWrapper:
         # Hypothesis: can't score more than once in a small interval of frames.
         total_reward = sum(reward_buffer)
 
+        if len(frames) == 0:
+            frames = None
+
         return frames, total_reward, terminated, trunc, info
 
     def reset(self, seed=None):
         # Reset the env and save initial frame
         frame, info = self.env.reset(seed=seed)
+
+        for _ in range(torch.randint(3, 30, [1]).item()):
+            frame, reward, terminated, trunc, info = self.env.step(NO_OP)
+
         self.num_lives = info.get('lives', 0)
         self.frame_buffer = [frame]
         # Repeat the frame N times to run through the model

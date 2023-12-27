@@ -111,7 +111,7 @@ def test_cart_pole_train_batched():
     a3c.train_loop(
         global_agent, agents, [env],
         step_limit=1e9, episode_limit=2000, log_interval=100,
-        solved_thresh=env.spec.reward_threshold, t_max=5
+        solved_thresh=env.spec.reward_threshold, steps_per_batch=5
     )
 
 
@@ -145,7 +145,7 @@ def test_cart_pole_train_arch():
     agent, solved = a3c.train_loop(
         global_agent, agents, [env],
         step_limit=1e9, episode_limit=2000, log_interval=100,
-        solved_thresh=env.spec.reward_threshold, t_max=1250
+        solved_thresh=env.spec.reward_threshold, steps_per_batch=1250
     )
     assert solved
 
@@ -186,7 +186,7 @@ def test_cart_pole_train_multi():
     agent, solved = a3c.train_loop(
         global_agent, agents, envs,
         step_limit=1e9, episode_limit=2000, log_interval=100,
-        solved_thresh=envs[0].spec.reward_threshold, t_max=5,
+        solved_thresh=envs[0].spec.reward_threshold, steps_per_batch=5,
         debug=False
     )
     assert solved

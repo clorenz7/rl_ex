@@ -1,9 +1,11 @@
 import gymnasium as gym
 import torch
 
+import cor_rl.agents
 from cor_rl import atari
 from cor_rl import environments
 from cor_rl.agents import atari_a2c
+from cor_rl import a3c
 
 RIGHT_FIRE = 4
 NO_OP = 0
@@ -106,4 +108,47 @@ def test_life_counter_ends_episode():
     # At episode start, there should be one frame in the buffer
     assert len(env.frame_buffer) == 1
     # There should be no frames returned on termination
-    assert len(frames) == 0
+    assert frames is None
+
+
+def test_space_invaders_train():
+    # TODO: Move this to a script
+
+    agent_params = {
+        'n_actions': 6,
+        'gamma': 0.99,
+        'entropy_weight': 0.01,
+        'grad_clip': 1.0,
+        'type': 'a2c-atari',
+    }
+    train_params = {
+        'optimizer': 'rmsprop',
+        'lr': 1e-3,
+        'alpha': 0.99,
+    }
+
+    env_name = 'ALE/SpaceInvaders-v5'
+    n_workers = 4
+
+    global_agent = cor_rl.agents.factory(agent_params, train_params)
+    agents = []
+    envs = []
+    for i in range(n_workers):
+        env = environments.factory(env_name)
+        env.reset(seed=888 + i * 101)
+        envs.append(env)
+        agents.append(cor_rl.agents.factory(agent_params, train_params))
+
+    agent, solved = a3c.train_loop(
+        global_agent, agents, envs,
+        log_interval=10, seed=888, total_step_limit=50000,
+        steps_per_batch=5, avg_decay=0.95,
+    )
+    # print("")  # For ease of reading
+    # agent, solved = a3c.train_loop(
+    #     n_workers, agent_params, train_params, env_name,
+    #     log_interval=10, seed=888, total_step_limit=50000,
+    #     steps_per_batch=5, avg_decay=0.95,
+    # )
+    import ipdb; ipdb.set_trace()
+

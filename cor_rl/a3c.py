@@ -33,6 +33,10 @@ def interact(env, agent, t_max=5, state=None, output_frames=False):
         action_idx, value_est, entropy, log_prob = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
 
+        if state is None:
+            # Lost a life: episode restart
+            break
+
         results.rewards.append(reward)
         results.values.append(value_est)
         results.log_probs.append(log_prob)
@@ -45,6 +49,9 @@ def interact(env, agent, t_max=5, state=None, output_frames=False):
     if terminated:
         value_est = 0.0
         state = None
+    elif state is None:
+        # Lost a life: episode restart
+        value_est = 0.0
     else:
         # Get an estimate of the value of the final state
         with torch.no_grad():
@@ -85,15 +92,18 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     return output
 
 
-def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit=10000, episode_limit=None,
-               log_interval=1e9, solved_thresh=None, max_ep_steps=10000, t_max=10000, debug=False,
-               avg_decay=0.95):
+def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
+               total_step_limit=10000, episode_limit=None,
+               log_interval=1e9, solved_thresh=None, max_ep_steps=10000,
+               steps_per_batch=10000, debug=False,
+               avg_decay=0.95, seed=None):
     """
     This is a single threaded (serial) training loop with multiple agents
     """
     start_time = time.time()
 
     solved_thresh = solved_thresh or float('inf')
+    episode_limit = episode_limit or 1e9
     total_steps = 0
     n_episodes = 0
     ep_steps, ep_reward = 0, 0
@@ -104,7 +114,10 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
     states = [None] * n_threads
     print("")
 
-    while total_steps < step_limit and n_episodes < episode_limit:
+    if seed:
+        torch.manual_seed(seed)
+
+    while total_steps < total_step_limit and n_episodes < episode_limit:
         params = global_agent.get_parameters()
         if debug:
             for key, val in params.items():
@@ -119,7 +132,8 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs, step_limit
         for t_idx in range(n_threads):
             agent = agents[t_idx]
             task_result = agent_env_task(
-                agent, envs[t_idx], params, states[t_idx], t_max=t_max
+                agent, envs[t_idx], params, states[t_idx],
+                t_max=steps_per_batch
             )
             n_steps = task_result['n_steps']
             ep_reward += task_result['total_reward']
