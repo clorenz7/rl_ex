@@ -1,5 +1,6 @@
 from contextlib import contextmanager
 import multiprocessing
+import os
 import time
 
 import torch
@@ -50,8 +51,9 @@ def interact(env, agent, t_max=5, state=None, output_frames=False):
         value_est = 0.0
         state = None
     elif state is None:
-        # Lost a life: episode restart. Take a no-op
-        state, reward, terminated, _, _ = env.step(0)
+        # Lost a life: episode restart. Take a few no-ops
+        for _ in range(3):
+            state, reward, terminated, _, _ = env.step(0)
         value_est = 0.0
     else:
         # Get an estimate of the value of the final state
@@ -304,7 +306,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                         steps_per_batch=5, total_step_limit=10000,
                         episode_limit=None, max_steps_per_episode=10000,
                         solved_thresh=None, log_interval=1e9, seed=8888,
-                        avg_decay=0.95, debug=False):
+                        avg_decay=0.95, debug=False, out_dir=None):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
@@ -315,9 +317,15 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
     total_steps = total_episodes = 0
     ep_steps, ep_reward = [0]*n_workers, [0]*n_workers
     avg_reward = 0
+    win_max_reward = max_reward = 0
     solved = False
     episode_limit = episode_limit or 1e9
     keep_training = True
+
+    accumulate_grads = False
+
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
 
     env_params = {
         'env_name': env_name,
@@ -329,6 +337,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
     if seed:
         torch.manual_seed(seed)
     global_agent = cor_rl.agents.factory(agent_params, train_params)
+    global_agent.zero_grad()
 
     worker_args = [agent_params, train_params, env_params]
     with piped_workers(n_workers, worker_thread, worker_args) as msg_pipes:
@@ -352,8 +361,12 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                 if debug:
                     _show_grads(result)
 
-                global_agent.set_grads(result['grads'])
-                global_agent.backward()
+                # TODO: Should this be adding the grads?
+                if accumulate_grads:
+                    global_agent.accumulate_grads(result['grads'])
+                else:
+                    global_agent.set_grads(result['grads'])
+                    global_agent.backward()
 
                 # Update counters and print out if necessary
                 total_steps += result['n_steps']
@@ -362,6 +375,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                 if result['terminated']:
                     total_episodes += 1
                     last_reward = ep_reward[w_idx]
+                    win_max_reward = max(last_reward, win_max_reward)
                     avg_reward = (
                         avg_decay * avg_reward +
                         (1.0 - avg_decay) * last_reward
@@ -371,11 +385,19 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                     if (total_episodes % log_interval) == 0:
                         print(
                             f'Episode {total_episodes}\t'
-                            f'Last reward: {last_reward:.2f}\t'
+                            f'Max reward: {win_max_reward:.2f}\t'
                             f'Average reward: {avg_reward:.2f}'
                         )
+                        win_max_reward = 0
+                        if out_dir:
+                            out_file = f"ep_{total_episodes}.chkpt"
+                            global_agent.checkpoint(
+                                os.path.join(out_dir, out_file)
+                            )
                 if solved:
                     break
+            if accumulate_grads and not solved:
+                global_agent.backward()
 
             keep_training = (
                 not solved and

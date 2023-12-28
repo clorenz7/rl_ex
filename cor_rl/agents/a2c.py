@@ -158,14 +158,31 @@ class AdvantageActorCriticAgent(BaseAgent):
         for name, param in self.net.named_parameters():
             param.grad = grads[name]
 
+    def accumulate_grads(self, grads):
+        for name, param in self.net.named_parameters():
+            if param.grad is None:
+                param.grad = grads[name]
+            else:
+                param.grad = param.grad + grads[name]
+
     def get_grads(self, results: InteractionResult):
         # Compute the loss
         loss = self.calculate_loss(results)
         loss.backward()
 
+        if self.grad_clip > 0:
+            norm_val = nn.utils.clip_grad_norm_(
+                self.net.parameters(), self.grad_clip
+            )
+
         grads = {}
         for name, param in self.net.named_parameters():
             grads[name] = param.grad.detach()
+        # norm_val = nn.utils.clip_grad_norm_(self.net.parameters(), self.grad_clip)
+        # grads2 = {}
+        # for name, param in self.net.named_parameters():
+        #     grads2[name] = param.grad.detach()
+        # print(norm_val)
 
         return grads
 
