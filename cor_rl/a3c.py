@@ -1,6 +1,8 @@
 from contextlib import contextmanager
+import math
 import multiprocessing
 import os
+import select
 import time
 
 import torch
@@ -86,7 +88,10 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     #     )
 
     # This will run back prop
-    grads = agent.get_grads(results)
+    if parameters is None:
+        grads = None
+    else:
+        grads = agent.get_grads(results)
 
     output = {
         'grads': grads,
@@ -163,11 +168,13 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
                 )
                 n_episodes += 1
                 if (n_episodes % log_interval) == 0:
+                    elap = (time.time() - start_time) / 60
                     print(
                         f'Episode {n_episodes}\tMax reward: {max_reward:.2f}\t'
-                        f'Average reward: {avg_reward:.2f}'
+                        f'Average reward: {avg_reward:.2f}\t Time: {elap:0.1f}min'
                     )
-                ep_steps = ep_reward = max_reward = 0
+                    max_reward = 0
+                ep_steps = ep_reward
 
             if debug:
                 print(f"State: {states[t_idx]}")
@@ -213,26 +220,47 @@ def piped_workers(n_workers, worker_func, worker_args):
         worker_processes.append(worker_process)
         worker_process.start()
 
+    parent_conn, child_conn = multiprocessing.Pipe()
+    parent_conns.append(parent_conn)
+    child_conns.append(child_conn)
+    eval_process = multiprocessing.Process(
+        target=worker_func,
+        args=[i, child_conn, *worker_args],
+        kwargs={'eval_mode': True}
+    )
+    worker_processes.append(eval_process)
+    eval_process.start()
+
     try:
         yield parent_conns
     finally:
-        for i in range(n_workers):
+        for i in range(n_workers+1):
             worker_processes[i].terminate()
             parent_conns[i].close()
             child_conns[i].close()
 
 
-def worker_thread(task_id, conn, agent_params, train_params, env_params):
+def worker_thread(task_id, conn, agent_params, train_params, env_params,
+                  eval_mode=False):
     """
     This is the thread which trains an agent based on messages from the parent.
     It receives the current global model parameters and
     returns gradient updates to apply to the global model.
+
+    Eval mode turns off gradients and reward clipping
     """
 
-    env_name = env_params['env_name']
-    seed = env_params.get('seed', 8888)
-    max_steps_per_episode = env_params.get('max_steps_per_episode', 1e9)
-    env = environments.factory.get(env_name)
+    if eval_mode:
+        agent_params = dict(agent_params)
+        env_params = dict(env_params)
+        # Turn off reward clipping
+        env_params['reward_clip'] = None
+        agent_params['reward_clip'] = None
+
+    env_name = env_params.pop('env_name')
+    seed = env_params.pop('seed', 8888)
+    max_steps_per_episode = env_params.pop('max_steps_per_episode', 1e9)
+    env = environments.factory.get(env_name, **env_params)
     ep_steps = 0
     if seed:
         task_seed = seed + task_id * 10
@@ -272,6 +300,30 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params):
 
             # Send result to parent process
             conn.send(result)
+        elif task_type == 'eval':
+            if not eval_mode:
+                raise ValueError("You should be in eval mode!")
+
+            # Play 5 games and average the score
+            n_games = task.get('n_games', 8)
+            scores = []
+            agent.set_parameters(task['params'])
+            with torch.no_grad():
+                for g_idx in range(n_games):
+                    result = agent_env_task(
+                        agent, env, None, state=None, t_max=100000
+                    )
+                    scores.append(result['total_reward'])
+
+            avg_score = sum(scores) / n_games
+            std_scores = sum((s - avg_score)**2 for s in scores) / n_games
+            result = {
+                'scores': scores,
+                'avg_score': avg_score,
+                'std_score': math.sqrt(std_scores),
+                'reward_clip': agent.reward_clip,
+            }
+            conn.send(result)
 
         elif task_type == 'params':
             params = agent.get_parameters()
@@ -307,12 +359,15 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                         steps_per_batch=5, total_step_limit=10000,
                         episode_limit=None, max_steps_per_episode=10000,
                         solved_thresh=None, log_interval=1e9, seed=8888,
-                        avg_decay=0.95, debug=False, out_dir=None):
+                        avg_decay=0.95, debug=False, out_dir=None, eval_interval=None):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
     """
-    start_time = time.time()
+
+    eval_interval = eval_interval or float('inf')
+    last_eval_time = 0.0
+    eval_in_flight = False
 
     solved_thresh = solved_thresh or float('inf')
     total_steps = total_episodes = 0
@@ -342,6 +397,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
 
     worker_args = [agent_params, train_params, env_params]
     with piped_workers(n_workers, worker_thread, worker_args) as msg_pipes:
+        start_time = time.time()
         while keep_training:
             params = global_agent.get_parameters()
             if debug:
@@ -355,6 +411,13 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
             }
             for w_idx in range(n_workers):
                 msg_pipes[w_idx].send(payload)
+
+            elap_time = (time.time() - start_time) / 60
+            do_eval = (elap_time - last_eval_time) > eval_interval
+            if do_eval:
+                msg_pipes[n_workers].send({'type': 'eval', 'params': params})
+                eval_in_flight = True
+                last_eval_time = elap_time
 
             # Get the result from each worker and update the model
             for w_idx in range(n_workers):
@@ -384,10 +447,12 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                     solved = avg_reward > solved_thresh
                     ep_steps[w_idx] = ep_reward[w_idx] = 0
                     if (total_episodes % log_interval) == 0:
+                        elap = (time.time() - start_time) / 60
                         print(
                             f'Episode {total_episodes}\t'
+                            f'Average reward: {avg_reward:.2f}\t'
                             f'Max reward: {win_max_reward:.2f}\t'
-                            f'Average reward: {avg_reward:.2f}'
+                            f'Time: {elap:0.1f}min'
                         )
                         win_max_reward = 0
                         if out_dir:
@@ -399,6 +464,22 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                     break
             if accumulate_grads and not solved:
                 global_agent.backward()
+
+            if eval_in_flight:
+
+                eval_conn = msg_pipes[n_workers]
+                readable_fds, _, _ = select.select(
+                    [eval_conn], [], [], 0  # 0 is timeout (no blocking)
+                )
+                if eval_conn in readable_fds:
+                    result = eval_conn.recv()
+                    print(
+                        f"Evaluation\t"
+                        f"Average score: {result['avg_score']:0.1f}\t"
+                        f"Std score: {result['std_score']:0.1f}\t"
+                        f"Time: {last_eval_time:0.1f}min"
+                    )
+                    eval_in_flight = False
 
             keep_training = (
                 not solved and

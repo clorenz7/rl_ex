@@ -122,7 +122,7 @@ def test_space_invaders_train():
         'n_actions': 6,
         'gamma': 0.99,
         'entropy_weight': 0.01,  # 0.05 saw things happening...
-        'grad_clip': 1.0,
+        'grad_clip': 5.0,
         'type': 'a2c-atari',
     }
     train_params = {
@@ -165,6 +165,7 @@ def test_space_invaders_a3c():
         'entropy_weight': 0.01,  # 0.05 saw things happening...
         'grad_clip': 5.0,
         'type': 'a2c-atari',
+        'reward_clip': 1.0,
     }
     train_params = {
         'optimizer': 'rmsprop',
@@ -190,7 +191,7 @@ def test_space_invaders_a3c():
     agent, solved = a3c.train_loop_parallel(
         n_workers, agent_params, train_params, env_name,
         log_interval=10, seed=888, total_step_limit=5000000,
-        steps_per_batch=5, avg_decay=0.95,
+        steps_per_batch=5, avg_decay=0.95, eval_interval=5,
         # out_dir=os.path.join(DEFAULT_DIR, "a3c_test")
     )
 
