@@ -117,7 +117,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
     total_steps = 0
     n_episodes = 0
     ep_steps, ep_reward = 0, 0
-    avg_reward = 0
+    avg_reward = max_reward = 0
     solved = False
 
     n_threads = len(agents)
@@ -147,6 +147,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
             )
             n_steps = task_result['n_steps']
             ep_reward += task_result['total_reward']
+            max_reward = max(max_reward, ep_reward)
             ep_steps += n_steps
             total_steps += n_steps
             if ep_steps >= max_ep_steps:
@@ -163,10 +164,10 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
                 n_episodes += 1
                 if (n_episodes % log_interval) == 0:
                     print(
-                        f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\t'
+                        f'Episode {n_episodes}\tMax reward: {max_reward:.2f}\t'
                         f'Average reward: {avg_reward:.2f}'
                     )
-                ep_steps = ep_reward = 0
+                ep_steps = ep_reward = max_reward = 0
 
             if debug:
                 print(f"State: {states[t_idx]}")

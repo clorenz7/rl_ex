@@ -32,19 +32,23 @@ class AtariEnvWrapper:
     Implements frame averaging & stacking, action reptition, and reward clipping
     """
 
-    def __init__(self, game_name, n_repeat=4, reward_clip=1.0, trim_x=0, **kwargs):
+    def __init__(self, game_name, n_stack=4, n_repeat=4, reward_clip=1.0,
+                 trim_x=0, noop_max=30, **kwargs):
         self.env = gym.make(game_name, obs_type='rgb', frameskip=1, **kwargs)
         self.n_repeat = n_repeat
+        self.n_stack = n_stack
         self.frame_buffer = []
         self.reward_clip = reward_clip
         self.num_lives = 0
         self.trim_x = trim_x
+        self.noop_max = noop_max
 
     def step(self, action):
         reward_buffer = []
+        frame_skip_buffer = []
         for i in range(self.n_repeat):
             frame, reward, terminated, trunc, info = self.env.step(action)
-            self.frame_buffer.append(frame)
+            frame_skip_buffer.append(frame)
 
             if self.reward_clip:
                 reward = min(max(reward, -self.reward_clip), self.reward_clip)
@@ -57,48 +61,64 @@ class AtariEnvWrapper:
             if terminated:
                 break
             if lost_a_life:
+                # TODO: I think this should be down below
                 # Start the next life to initialize the frame buffer
-                frame, _, _, _, _ = self.env.step(action)
-                self.frame_buffer = [frame]
-                break
-
-        frames = []
-        if not (terminated or lost_a_life):
-            # Pre-process and stack frames for the model
-            for i in range(self.n_repeat):
+                frame_0, _, _, _, _ = self.env.step(action)
+                frame_1, _, _, _, _ = self.env.step(action)
                 frame = preprocess_frames(
-                    self.frame_buffer[i+1], self.frame_buffer[i],
+                    frame_1, frame_0,
                     trim_x=self.trim_x
                 )
-                frames.append(frame)
+                self.frame_buffer = [frame] * self.n_stack
+                break
 
-            frames = torch.dstack(frames).permute(2, 0, 1)
-            # Keep last frame to do the average next time
-            self.frame_buffer = self.frame_buffer[-1:]
+        if terminated or lost_a_life:
+            frames = None
+        else:
+            # Pre-process and stack frames for the model
+            # for i in range(self.n_repeat):
+            #     frame = preprocess_frames(
+            #         self.frame_buffer[i+1], self.frame_buffer[i],
+            #         trim_x=self.trim_x
+            #     )
+            #     frames.append(frame)
+
+            frame = preprocess_frames(
+                frame_skip_buffer[-1], frame_skip_buffer[-2],
+                trim_x=self.trim_x
+            )
+            self.frame_buffer.append(frame)
+            self.frame_buffer = self.frame_buffer[-self.n_stack:]
+
+            frames = torch.dstack(self.frame_buffer).permute(2, 0, 1)
+            # # Keep last frame to do the average next time
+            # self.frame_buffer = self.frame_buffer[-1:]
 
         # TODO: Is clipping done here or frame by frame?
         # Hypothesis: can't score more than once in a small interval of frames.
         total_reward = sum(reward_buffer)
 
-        if len(frames) == 0:
-            frames = None
+        # if len(frames) == 0:
+        #     frames = None
 
         return frames, total_reward, terminated, trunc, info
 
     def reset(self, seed=None):
         # Reset the env and save initial frame
         frame, info = self.env.reset(seed=seed)
-        prev_frame = frame
+        # prev_frame = frame
         self.num_lives = info.get('lives', 0)
 
-        for _ in range(torch.randint(5, 30, [1]).item()):
-            prev_frame = frame
-            frame, reward, terminated, trunc, info = self.env.step(NO_OP)
+        n_no_ops = self.env.np_random.integers(1, self.noop_max + 1)
 
-        self.frame_buffer = [frame]
-        # Repeat the frame N times to run through the model
-        start_frame = preprocess_frames(frame, prev_frame)
-        frames = torch.dstack([start_frame]*self.n_repeat).permute(2, 0, 1)
+        for _ in range(n_no_ops):
+            # prev_frame = frame
+            frames, total_reward, terminated, trunc, info = self.step(NO_OP)
+
+        # self.frame_buffer = [frame]
+        # # Repeat the frame N times to run through the model
+        # start_frame = preprocess_frames(frame, prev_frame)
+        # frames = torch.dstack([start_frame]*self.n_repeat).permute(2, 0, 1)
 
         return frames, info
 
