@@ -32,9 +32,62 @@ class BaseAgent:
             )
         return state
 
+    def state_to_features(self, state):
+        return self.normalize_state(state)
+
     def normalize_state(self, state):
         features = torch.from_numpy(state).float()
         if self.mu:
             features = (features - self.mu)/self.sigma
 
         return features.to(self.device)
+
+
+class RepeatAgent(BaseAgent):
+
+    def __init__(self, agent_params={}, train_params={}, device="cpu"):
+        super().__init__(agent_params)
+        self.device = device
+        self.repeat_action = int(self.agent_params.get('repeat_action', 0))
+        self.train_params = dict(train_params)
+
+        self.reset()
+
+    def select_action(self, state=None):
+        return self.repeat_action, 0.0, 0.0, 0.0
+
+    def construct_net(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def checkpoint(self, file_name):
+        pass
+
+    def load(self, file_name: str):
+        pass
+
+    def calculate_loss(self, results):
+        return 0.0
+
+    def set_parameters(self, state_dict):
+        pass
+
+    def get_parameters(self):
+        return {}
+
+    def set_grads(self, grads):
+        pass
+
+    def accumulate_grads(self, grads):
+        pass
+
+    def get_grads(self, results=None):
+        return {}
+
+    def backward(self):
+        pass
+
+    def zero_grad(self):
+        pass

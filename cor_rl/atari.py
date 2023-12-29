@@ -32,7 +32,7 @@ class AtariEnvWrapper:
     Implements frame averaging & stacking, action reptition, and reward clipping
     """
 
-    def __init__(self, game_name, n_stack=4, n_repeat=4, reward_clip=1.0,
+    def __init__(self, game_name, n_stack=4, n_repeat=4, reward_clip=None,
                  trim_x=0, noop_max=30, **kwargs):
         self.env = gym.make(game_name, obs_type='rgb', frameskip=1, **kwargs)
         self.n_repeat = n_repeat

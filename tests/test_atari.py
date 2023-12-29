@@ -163,6 +163,7 @@ def test_compare_envs():
         env_name, noop_max=1, reward_clip=None, repeat_action_probability=0.0
     )
     c_state, _ = cor_env.reset(seed=8888)
+    initial_state = c_state
 
     wrap_env = environments.factory(
         'W'+env_name, noop_max=1, repeat_action_probability=0.0,
@@ -194,4 +195,33 @@ def test_compare_envs():
     assert c_term and w_term
     assert abs(c_states[50].mean() - w_states[50].mean()) < 1e-3
     assert abs(c_states[50].std() - w_states[50].std()) < 1e-3
+
+
+    # Now, test that the worker thread in eval mode gets the same score.
+    agent_params = {
+        'n_actions': 6,
+        'type': 'repeater',
+        'repeat_action': RIGHT_FIRE,
+    }
+
+    env_params = dict(
+        env_name='ALE/SpaceInvaders-v5',
+        seed=8888,
+        repeat_action_probability=0.0,
+        noop_max=1,
+        reward_clip=None,
+    )
+    train_params = {}
+    from cor_rl.a3c import piped_workers, worker_thread
+
+    worker_args = [agent_params, train_params, env_params]
+    with piped_workers(0, worker_thread, worker_args) as msg_pipes:
+
+        msg_pipes[0].send({'type': 'state'})
+        thread_state = torch.tensor(msg_pipes[0].recv())
+
+        msg_pipes[0].send({'type': 'eval', 'params': None, 'n_games': 1})
+        result = msg_pipes[0].recv()
+
+    assert result['scores'][0] == sum(c_rewards)
 

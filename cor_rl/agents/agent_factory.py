@@ -1,5 +1,6 @@
 from . import a2c
 from . import atari_a2c
+from .base import RepeatAgent
 
 
 class AgentFactory:
@@ -10,6 +11,7 @@ class AgentFactory:
         # 'actor-critic': ac_agents.MountainCarActorCriticAgent,
         'a2c-ffw': a2c.AdvantageActorCriticAgent,
         'a2c-atari': atari_a2c.Mnih2016A2CAgent,
+        'repeater': RepeatAgent,
     }
 
     def get(self, agent_params, train_params, device="cpu"):

@@ -15,7 +15,8 @@ from cor_rl.agents.a2c import (
 )
 
 
-def interact(env, agent, t_max=5, state=None, output_frames=False):
+def interact(env, agent, t_max=5, state=None, output_frames=False,
+             break_on_lost_life=True):
     """
     Does t_max steps of the agent in the environment.
     This is single threaded.
@@ -45,8 +46,16 @@ def interact(env, agent, t_max=5, state=None, output_frames=False):
             frame_buffer.append(env.render())
 
         if state is None:
-            # Lost a life: episode restart
-            break
+            if break_on_lost_life:
+                # Lost a life: episode restart
+                break
+            else:
+                # Do a no-op to get some data
+                state, reward, terminated, _, _ = env.step(0)
+                results.rewards.append(reward)
+                results.values.append(0.0)
+                results.log_probs.append(0.0)
+                results.entropies.append(0.0)
         t += 1
 
     if terminated:
@@ -69,7 +78,7 @@ def interact(env, agent, t_max=5, state=None, output_frames=False):
 
 
 def agent_env_task(agent, env, parameters, state, t_max=5,
-                   output_frames=False):
+                   output_frames=False, eval_mode=False):
 
     if parameters is not None:
         agent.set_parameters(parameters)
@@ -77,7 +86,8 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     agent.zero_grad()
 
     results, state, terminated, frames = interact(
-        env, agent, t_max=t_max, state=state, output_frames=output_frames
+        env, agent, t_max=t_max, state=state, output_frames=output_frames,
+        break_on_lost_life=not eval_mode
     )
     # # If the only step was losing a life, start the next life
     # # Since no information was provided
@@ -97,6 +107,7 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
         'grads': grads,
         'state': state,
         'total_reward': sum(results.rewards),
+        'rewards': results.rewards,
         'terminated': terminated,
         'n_steps': len(results.rewards),
     }
@@ -225,7 +236,7 @@ def piped_workers(n_workers, worker_func, worker_args):
     child_conns.append(child_conn)
     eval_process = multiprocessing.Process(
         target=worker_func,
-        args=[i, child_conn, *worker_args],
+        args=[0, child_conn, *worker_args],
         kwargs={'eval_mode': True}
     )
     worker_processes.append(eval_process)
@@ -264,9 +275,10 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
     ep_steps = 0
     if seed:
         task_seed = seed + task_id * 10
-        env.reset(seed=task_seed)
+        state, info = env.reset(seed=task_seed)
         torch.manual_seed(task_seed)
-    state = None  # Force reset to match previous work
+    if not eval_mode:
+        state = None  # Force reset to match previous work
 
     agent = cor_rl.agents.factory(agent_params, train_params)
     torch.manual_seed(task_seed)  # Reset seed to match previous work
@@ -311,8 +323,10 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
             with torch.no_grad():
                 for g_idx in range(n_games):
                     result = agent_env_task(
-                        agent, env, None, state=None, t_max=100000
+                        agent, env, None, state=state, t_max=100000,
+                        eval_mode=True
                     )
+                    state = None
                     scores.append(result['total_reward'])
 
             avg_score = sum(scores) / n_games
@@ -322,6 +336,7 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
                 'avg_score': avg_score,
                 'std_score': math.sqrt(std_scores),
                 'reward_clip': agent.reward_clip,
+                'rewards': result['rewards'],
             }
             conn.send(result)
 
@@ -335,6 +350,8 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
         elif task_type == 'STOP':
             conn.send("FINISH HIM!")
             break
+        else:
+            conn.send("NO TYPE")
 
 
 def _show_params(params, msg_pipe):

@@ -86,8 +86,6 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         return action.item(), value_est, entropy, log_prob
 
-    def state_to_features(self, state):
-        return self.normalize_state(state)
 
     def construct_net(self):
         return PolicyValueNetwork(
