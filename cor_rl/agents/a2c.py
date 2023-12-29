@@ -69,6 +69,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
 
         self.norm_returns = self.agent_params.get('norm_returns', False)
+        self.clip_grad_norm = self.agent_params.get('clip_grad_norm', 0.0)
 
         self.reset()
 
@@ -121,12 +122,12 @@ class AdvantageActorCriticAgent(BaseAgent):
             std = n_step_returns.std() + EPS
             n_step_returns = (n_step_returns - n_step_returns.mean()) / std
 
-        if self.grad_clip is None or self.grad_clip <= 0:
+        if self.value_loss_clip is None or self.value_loss_clip <= 0:
             value_loss = F.mse_loss(value_est, n_step_returns)
         else:
             value_loss = F.smooth_l1_loss(
                 value_est, n_step_returns,
-                beta=self.grad_clip, reduction="none"
+                beta=self.value_loss_clip, reduction="none"
             )
 
         # Advantage is a semi-gradient update
@@ -170,9 +171,9 @@ class AdvantageActorCriticAgent(BaseAgent):
         loss = self.calculate_loss(results)
         loss.backward()
 
-        if self.grad_clip > 0:
+        if self.clip_grad_norm > 0:
             norm_val = nn.utils.clip_grad_norm_(
-                self.net.parameters(), self.grad_clip
+                self.net.parameters(), self.clip_grad_norm
             )
 
         grads = {}

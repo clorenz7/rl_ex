@@ -61,7 +61,7 @@ def test_cart_pole_train_pt_rep():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'grad_clip': 2.0,
+        'value_loss_clip': 2.0,
         'type': 'a2c-ffw',
     }
     train_params = {
@@ -96,7 +96,7 @@ def test_cart_pole_train_batched():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'grad_clip': 2.0,
+        'value_loss_clip': 2.0,
         'type': 'a2c-ffw',
     }
     train_params = {
@@ -131,7 +131,7 @@ def test_cart_pole_train_arch():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'grad_clip': 2.0,
+        'value_loss_clip': 2.0,
         'type': 'a2c-ffw',
     }
     train_params = {
@@ -163,7 +163,7 @@ def test_cart_pole_train_multi():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'grad_clip': 2.0,
+        'value_loss_clip': 2.0,
     }
     train_params = {
         'optimizer': 'adamw',
@@ -203,7 +203,7 @@ def test_cart_pole_train_a3c():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'grad_clip': 2.0,
+        'value_loss_clip': 2.0,
         'type': 'a2c-ffw',
     }
     train_params = {

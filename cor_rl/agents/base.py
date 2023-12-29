@@ -11,7 +11,7 @@ class BaseAgent:
         self.max_vals = self.agent_params.get('max_vals', None)
         self.n_actions = agent_params.get('n_actions')
         self.n_state = agent_params.get('n_state')
-        self.grad_clip = self.agent_params.get('grad_clip', 1.0) or 0.0
+        self.value_loss_clip = self.agent_params.get('value_loss_clip', 0.0) or 0.0
         self.reward_clip = self.agent_params.get('reward_clip')
         self.entropy_weight = self.agent_params.get('entropy_weight', 0.01)
         if self.min_vals and self.max_vals:
