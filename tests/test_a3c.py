@@ -75,7 +75,7 @@ def test_cart_pole_train_pt_rep():
 
     agent, solved = a3c.train_loop(
         global_agent, agents, [env],
-        step_limit=1e9, episode_limit=2000, log_interval=100,
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=env.spec.reward_threshold
     )
     assert solved
@@ -108,11 +108,12 @@ def test_cart_pole_train_batched():
     torch.manual_seed(543)
     agents = [cor_rl.agents.factory(agent_params, train_params)]
 
-    a3c.train_loop(
+    agent, solved = a3c.train_loop(
         global_agent, agents, [env],
-        step_limit=1e9, episode_limit=2000, log_interval=100,
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=env.spec.reward_threshold, steps_per_batch=5
     )
+    assert solved
 
 
 def test_cart_pole_train_arch():
@@ -144,7 +145,7 @@ def test_cart_pole_train_arch():
 
     agent, solved = a3c.train_loop(
         global_agent, agents, [env],
-        step_limit=1e9, episode_limit=2000, log_interval=100,
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=env.spec.reward_threshold, steps_per_batch=1250
     )
     assert solved
@@ -185,7 +186,7 @@ def test_cart_pole_train_multi():
 
     agent, solved = a3c.train_loop(
         global_agent, agents, envs,
-        step_limit=1e9, episode_limit=2000, log_interval=100,
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=envs[0].spec.reward_threshold, steps_per_batch=5,
         debug=False
     )

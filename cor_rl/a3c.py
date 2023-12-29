@@ -174,7 +174,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
                         f'Average reward: {avg_reward:.2f}\t Time: {elap:0.1f}min'
                     )
                     max_reward = 0
-                ep_steps = ep_reward
+                ep_steps = ep_reward = 0
 
             if debug:
                 print(f"State: {states[t_idx]}")
@@ -254,7 +254,7 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
         agent_params = dict(agent_params)
         env_params = dict(env_params)
         # Turn off reward clipping
-        env_params['reward_clip'] = None
+        env_params.pop('reward_clip', None)
         agent_params['reward_clip'] = None
 
     env_name = env_params.pop('env_name')
@@ -355,7 +355,7 @@ def _show_grads(result):
     import ipdb; ipdb.set_trace()
 
 
-def train_loop_parallel(n_workers, agent_params, train_params, env_name,
+def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         steps_per_batch=5, total_step_limit=10000,
                         episode_limit=None, max_steps_per_episode=10000,
                         solved_thresh=None, log_interval=1e9, seed=8888,
@@ -382,12 +382,16 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    env_params = {
-        'env_name': env_name,
-        'seed': seed,
-        'max_steps_per_episode': max_steps_per_episode,
-        'repeat_action_probability': 0.0,
-    }
+    # env_params = {
+    #     'env_name': env_name,
+    #     'seed': seed,
+    #     'max_steps_per_episode': max_steps_per_episode,
+    #     'repeat_action_probability': 0.0,
+    # }
+    if isinstance(env_params, str):
+        env_params = {'env_name': env_params}
+    env_params['seed'] = seed
+    env_params['max_steps_per_episode'] = max_steps_per_episode
 
     # Seed and create the global agent
     if seed:
