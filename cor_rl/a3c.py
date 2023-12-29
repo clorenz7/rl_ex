@@ -384,7 +384,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     """
 
     eval_interval = eval_interval or float('inf')
-    last_eval_time = 0.0
+    last_eval_time = -eval_interval if eval_interval < float('inf') else 0.0
     eval_in_flight = False
 
     solved_thresh = solved_thresh or float('inf')
