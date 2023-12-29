@@ -129,3 +129,23 @@ class AtariEnvWrapper:
     @property
     def spec(self):
         return self.env.spec
+
+
+class FrameStacker:
+    def __init__(self, env, n_stack=4):
+        self.env = env
+        self.n_stack = n_stack
+        self.frame_buffer = []
+
+    def step(self, action):
+        frame, reward, terminated, trunc, info = self.env.step(action)
+        self.frame_buffer.append(frame)
+        self.frame_buffer = self.frame_buffer[-self.n_stack:]
+
+        frames = torch.dstack(self.frame_buffer).permute(2, 0, 1)
+
+        return frames, reward, terminated, trunc, info
+
+    def reset(self, seed=None):
+        frame, info = self.env.reset(seed=seed)
+        self.frame_buffer = [frame] * self.n_stack

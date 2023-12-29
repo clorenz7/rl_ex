@@ -1,26 +1,27 @@
 import gymnasium as gym
 
-from cor_rl.atari import AtariEnvWrapper
+from cor_rl.atari import AtariEnvWrapper, FrameStacker
 
 
 class EnvironmentFactory:
 
-    def __init__(self, use_gym_atari_wrapper=False):
-        self.use_gym_atari_wrapper = use_gym_atari_wrapper
+    def __init__(self):
+        pass
 
     def get(self, game_name, **kwargs):
         if game_name.startswith("ALE/"):
-            if self.use_gym_atari_wrapper:
-                env = gym.make(
-                    game_name, obs_type='rgb', frameskip=1,
-                    # **kwargs
-                )
-                return gym.wrappers.AtariPreprocessing(
-                    env, scale_obs=True, **kwargs
-                )
+            return AtariEnvWrapper(game_name, **kwargs)
 
-            else:
-                return AtariEnvWrapper(game_name, **kwargs)
+        elif game_name.startswith("WALE/"):
+            env = gym.make(
+                game_name[1:], obs_type='rgb', frameskip=1,
+                **kwargs
+            )
+            wenv = gym.wrappers.AtariPreprocessing(
+                env, scale_obs=True
+            )
+
+            return FrameStacker(wenv)
         else:
             return gym.make(game_name, **kwargs)
 

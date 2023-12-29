@@ -359,7 +359,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                         steps_per_batch=5, total_step_limit=10000,
                         episode_limit=None, max_steps_per_episode=10000,
                         solved_thresh=None, log_interval=1e9, seed=8888,
-                        avg_decay=0.95, debug=False, out_dir=None, eval_interval=None):
+                        avg_decay=0.95, debug=False, out_dir=None,
+                        eval_interval=None, accumulate_grads=False):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
@@ -378,8 +379,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
     episode_limit = episode_limit or 1e9
     keep_training = True
 
-    accumulate_grads = False
-
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
@@ -387,6 +386,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
         'env_name': env_name,
         'seed': seed,
         'max_steps_per_episode': max_steps_per_episode,
+        'repeat_action_probability': 0.0,
     }
 
     # Seed and create the global agent
@@ -415,6 +415,9 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
             elap_time = (time.time() - start_time) / 60
             do_eval = (elap_time - last_eval_time) > eval_interval
             if do_eval:
+                eval_steps = total_steps
+                # TODO: Make these pipes synchronous classes
+                # That store results on send and receive
                 msg_pipes[n_workers].send({'type': 'eval', 'params': params})
                 eval_in_flight = True
                 last_eval_time = elap_time
@@ -474,7 +477,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_name,
                 if eval_conn in readable_fds:
                     result = eval_conn.recv()
                     print(
-                        f"Evaluation\t"
+                        f"Epoch {eval_steps / 4e6:0.3f}\t"
                         f"Average score: {result['avg_score']:0.1f}\t"
                         f"Std score: {result['std_score']:0.1f}\t"
                         f"Time: {last_eval_time:0.1f}min"
