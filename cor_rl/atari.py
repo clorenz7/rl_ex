@@ -43,6 +43,17 @@ class AtariEnvWrapper:
         self.trim_x = trim_x
         self.noop_max = noop_max
 
+    def reload_frame_buffer(self, frame_0=None, frame_1=None):
+        if frame_0 is None:
+            frame_0, _, _, _, _ = self.env.step(NO_OP)
+        if frame_1 is None:
+            frame_1, _, _, _, _ = self.env.step(NO_OP)
+        frame = preprocess_frames(
+            frame_1, frame_0,
+            trim_x=self.trim_x
+        )
+        self.frame_buffer = [frame] * self.n_stack
+
     def step(self, action):
         reward_buffer = []
         frame_skip_buffer = []
@@ -63,13 +74,14 @@ class AtariEnvWrapper:
             if lost_a_life:
                 # TODO: I think this should be down below
                 # Start the next life to initialize the frame buffer
-                frame_0, _, _, _, _ = self.env.step(action)
-                frame_1, _, _, _, _ = self.env.step(action)
-                frame = preprocess_frames(
-                    frame_1, frame_0,
-                    trim_x=self.trim_x
-                )
-                self.frame_buffer = [frame] * self.n_stack
+                # frame_0, _, _, _, _ = self.env.step(action)
+                # frame_1, _, _, _, _ = self.env.step(action)
+                # frame = preprocess_frames(
+                #     frame_1, frame_0,
+                #     trim_x=self.trim_x
+                # )
+                # self.frame_buffer = [frame] * self.n_stack
+                self.reload_frame_buffer(frame_0=frame, frame_1=frame)
                 break
 
         if terminated or lost_a_life:
@@ -106,10 +118,12 @@ class AtariEnvWrapper:
     def reset(self, seed=None):
         # Reset the env and save initial frame
         frame, info = self.env.reset(seed=seed)
+        # self.frame_buffer = [torch.from_numpy(frame)] * self.n_stack
+        self.reload_frame_buffer(frame_0=frame)
         # prev_frame = frame
         self.num_lives = info.get('lives', 0)
 
-        n_no_ops = self.env.np_random.integers(1, self.noop_max + 1)
+        n_no_ops = self.env.np_random.integers(1, self.noop_max+1)
 
         for _ in range(n_no_ops):
             # prev_frame = frame
@@ -139,7 +153,7 @@ class FrameStacker:
 
     def step(self, action):
         frame, reward, terminated, trunc, info = self.env.step(action)
-        self.frame_buffer.append(frame)
+        self.frame_buffer.append(torch.from_numpy(frame))
         self.frame_buffer = self.frame_buffer[-self.n_stack:]
 
         frames = torch.dstack(self.frame_buffer).permute(2, 0, 1)
@@ -148,4 +162,8 @@ class FrameStacker:
 
     def reset(self, seed=None):
         frame, info = self.env.reset(seed=seed)
-        self.frame_buffer = [frame] * self.n_stack
+        self.frame_buffer = [torch.from_numpy(frame)] * self.n_stack
+
+        frames = torch.dstack(self.frame_buffer).permute(2, 0, 1)
+
+        return frames, info

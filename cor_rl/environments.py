@@ -8,9 +8,9 @@ class EnvironmentFactory:
     def __init__(self):
         pass
 
-    def get(self, game_name, **kwargs):
+    def get(self, game_name, noop_max=30, **kwargs):
         if game_name.startswith("ALE/"):
-            return AtariEnvWrapper(game_name, **kwargs)
+            return AtariEnvWrapper(game_name, noop_max=noop_max, **kwargs)
 
         elif game_name.startswith("WALE/"):
             env = gym.make(
@@ -18,7 +18,7 @@ class EnvironmentFactory:
                 **kwargs
             )
             wenv = gym.wrappers.AtariPreprocessing(
-                env, scale_obs=True
+                env, scale_obs=True, noop_max=noop_max,
             )
 
             return FrameStacker(wenv)

@@ -144,3 +144,54 @@ def test_life_counter_ends_episode():
 #     plt.subplot(2, 1,2); plt.imshow(np.hstack([w_states[idx][i, :, :] for i in range(4)]));
 #     plt.show()
 #     import ipdb; ipdb.set_trace()
+
+
+def _compare_frames(stack_1, stack_2):
+    import numpy as np
+    import matplotlib.pyplot as plt
+    plt.subplot(2, 1, 1);
+    plt.imshow(np.hstack([stack_1[i, :, :] for i in range(4)]));
+    plt.subplot(2, 1, 2);
+    plt.imshow(np.hstack([stack_2[i, :, :] for i in range(4)]));
+    plt.show()
+
+
+def test_compare_envs():
+
+    env_name = 'ALE/SpaceInvaders-v5'
+    cor_env = environments.factory(
+        env_name, noop_max=1, reward_clip=None, repeat_action_probability=0.0
+    )
+    c_state, _ = cor_env.reset(seed=8888)
+
+    wrap_env = environments.factory(
+        'W'+env_name, noop_max=1, repeat_action_probability=0.0,
+    )
+    w_state, _ = wrap_env.reset(seed=8888)
+    # Extra no nops to match cor_env inital no_op step
+    for _ in range(4):
+        wrap_env.env.env.step(NO_OP)
+
+    c_states, w_states = [], []
+    c_rewards, w_rewards = [], []
+
+    terminated = False
+
+    while not terminated:
+        c_state, reward, c_term, _, _ = cor_env.step(RIGHT_FIRE)
+        c_rewards.append(reward)
+        if c_state is not None:
+            c_states.append(c_state.numpy())
+
+        w_state, reward, w_term, _, _ = wrap_env.step(RIGHT_FIRE)
+        w_rewards.append(reward)
+        if w_state is not None:
+            w_states.append(w_state.numpy())
+
+        terminated = c_term or w_term
+
+    assert c_rewards == w_rewards
+    assert c_term and w_term
+    assert abs(c_states[50].mean() - w_states[50].mean()) < 1e-3
+    assert abs(c_states[50].std() - w_states[50].std()) < 1e-3
+
