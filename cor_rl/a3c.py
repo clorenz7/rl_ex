@@ -100,8 +100,12 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     # This will run back prop
     if parameters is None:
         grads = None
+        loss = agent.calculate_loss(results)
+        if not eval_mode:
+            agent.backward(loss)
+
     else:
-        grads = agent.get_grads(results)
+        grads, loss = agent.calc_and_get_grads(results)
 
     output = {
         'grads': grads,
@@ -209,7 +213,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
 
 
 @contextmanager
-def piped_workers(n_workers, worker_func, worker_args):
+def piped_workers(n_workers, worker_func, worker_args, agent=None):
     """
     Context manager to manage a set of training worker threads.
 
@@ -226,7 +230,8 @@ def piped_workers(n_workers, worker_func, worker_args):
 
         worker_process = multiprocessing.Process(
             target=worker_func,
-            args=[i, child_conn, *worker_args]
+            args=[i, child_conn, *worker_args],
+            kwargs={"agent": agent},
         )
         worker_processes.append(worker_process)
         worker_process.start()
@@ -237,7 +242,7 @@ def piped_workers(n_workers, worker_func, worker_args):
     eval_process = multiprocessing.Process(
         target=worker_func,
         args=[0, child_conn, *worker_args],
-        kwargs={'eval_mode': True}
+        kwargs={'eval_mode': True},
     )
     worker_processes.append(eval_process)
     eval_process.start()
@@ -252,7 +257,7 @@ def piped_workers(n_workers, worker_func, worker_args):
 
 
 def worker_thread(task_id, conn, agent_params, train_params, env_params,
-                  eval_mode=False):
+                  agent=None, eval_mode=False):
     """
     This is the thread which trains an agent based on messages from the parent.
     It receives the current global model parameters and
@@ -260,6 +265,8 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
 
     Eval mode turns off gradients and reward clipping
     """
+
+    shared_mode = agent is not None
 
     if eval_mode:
         agent_params = dict(agent_params)
@@ -280,7 +287,8 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
     if not eval_mode:
         state = None  # Force reset to match previous work
 
-    agent = cor_rl.agents.factory(agent_params, train_params)
+    if not shared_mode:
+        agent = cor_rl.agents.factory(agent_params, train_params)
     torch.manual_seed(task_seed)  # Reset seed to match previous work
 
     while True:
@@ -294,8 +302,9 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
                 state = None
 
             # Train the agent for a few steps
+            params = None if shared_mode else task['params']
             result = agent_env_task(
-                agent, env, task['params'], state,
+                agent, env, params, state,
                 t_max=task['max_steps']
             )
             # Update the state for next time
@@ -396,15 +405,12 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     episode_limit = episode_limit or 1e9
     keep_training = True
 
+    # If global_agent is shared between threads rather that copied
+    shared_mode = True
+
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    # env_params = {
-    #     'env_name': env_name,
-    #     'seed': seed,
-    #     'max_steps_per_episode': max_steps_per_episode,
-    #     'repeat_action_probability': 0.0,
-    # }
     if isinstance(env_params, str):
         env_params = {'env_name': env_params}
     env_params['seed'] = seed
@@ -415,12 +421,20 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
         torch.manual_seed(seed)
     global_agent = cor_rl.agents.factory(agent_params, train_params)
     global_agent.zero_grad()
+    if shared_mode:
+        global_agent.share_memory()
+        pipe_agent = global_agent
+    else:
+        pipe_agent = None
 
     worker_args = [agent_params, train_params, env_params]
-    with piped_workers(n_workers, worker_thread, worker_args) as msg_pipes:
+    with piped_workers(n_workers, worker_thread, worker_args, agent=pipe_agent) as msg_pipes:
         start_time = time.time()
         while keep_training:
-            params = global_agent.get_parameters()
+            if not shared_mode:
+                params = global_agent.get_parameters()
+            else:
+                params = None
             if debug:
                 _show_params(params, msg_pipes[0])
 
@@ -439,6 +453,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 eval_steps = total_steps
                 # TODO: Make these pipes synchronous classes
                 # That store results on send and receive
+                params = global_agent.get_parameters()
                 msg_pipes[n_workers].send({'type': 'eval', 'params': params})
                 eval_in_flight = True
                 last_eval_time = elap_time
@@ -449,12 +464,12 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 if debug:
                     _show_grads(result)
 
-                # TODO: Should this be adding the grads?
-                if accumulate_grads:
-                    global_agent.accumulate_grads(result['grads'])
-                else:
-                    global_agent.set_grads(result['grads'])
-                    global_agent.backward()
+                if not shared_mode:
+                    if accumulate_grads:
+                        global_agent.accumulate_grads(result['grads'])
+                    else:
+                        global_agent.set_grads(result['grads'])
+                        global_agent.backward()
 
                 # Update counters and print out if necessary
                 total_steps += result['n_steps']
@@ -486,7 +501,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                             )
                 if solved:
                     break
-            if accumulate_grads and not solved:
+            if (not shared_mode and accumulate_grads) and not solved:
                 global_agent.backward()
 
             if eval_in_flight:

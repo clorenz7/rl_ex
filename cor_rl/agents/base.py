@@ -1,9 +1,11 @@
 import torch
+from torch import nn
 
 
-class BaseAgent:
+class BaseAgent(nn.Module):
 
     def __init__(self, agent_params):
+        super().__init__()
         self.agent_params = agent_params or {}
         self.gamma = self.agent_params.get('gamma', 0.9)
         self.epsilon = self.agent_params.get('epsilon', 1e-8)
@@ -84,6 +86,9 @@ class RepeatAgent(BaseAgent):
         pass
 
     def get_grads(self, results=None):
+        return {}
+
+    def calc_and_get_grads(self, results=None):
         return {}
 
     def backward(self):

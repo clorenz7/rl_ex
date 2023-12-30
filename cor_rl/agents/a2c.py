@@ -164,7 +164,14 @@ class AdvantageActorCriticAgent(BaseAgent):
             else:
                 param.grad = param.grad + grads[name]
 
-    def get_grads(self, results: InteractionResult):
+    def get_grads(self):
+        grads = {}
+        for name, param in self.net.named_parameters():
+            grads[name] = param.grad.detach()
+
+        return grads
+
+    def calc_and_get_grads(self, results: InteractionResult):
         # Compute the loss
         loss = self.calculate_loss(results)
         loss.backward()
@@ -174,18 +181,37 @@ class AdvantageActorCriticAgent(BaseAgent):
                 self.net.parameters(), self.clip_grad_norm
             )
 
-        grads = {}
-        for name, param in self.net.named_parameters():
-            grads[name] = param.grad.detach()
+        grads = self.get_grads()
+
         # norm_val = nn.utils.clip_grad_norm_(self.net.parameters(), self.grad_clip)
         # grads2 = {}
         # for name, param in self.net.named_parameters():
         #     grads2[name] = param.grad.detach()
         # print(norm_val)
 
-        return grads
+        return grads, loss
 
-    def backward(self):
+    def calc_total_loss_and_backprop(self, loss_list):
+        loss = 0.0
+        for loss_val in loss_list:
+            loss = loss + loss_val
+        loss.backward()
+
+        if self.clip_grad_norm > 0:
+            norm_val = nn.utils.clip_grad_norm_(
+                self.net.parameters(), self.clip_grad_norm
+            )
+
+        return loss
+
+
+    def backward(self, loss=None):
+        if loss is not None:
+            loss.backward()
+            if self.clip_grad_norm > 0:
+                norm_val = nn.utils.clip_grad_norm_(
+                    self.net.parameters(), self.clip_grad_norm
+                )
         self.optimizer.step()
         # TODO: Add learning rate scheduler
 

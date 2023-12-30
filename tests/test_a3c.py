@@ -220,7 +220,7 @@ def test_cart_pole_train_a3c():
         n_workers, agent_params, train_params, env_name,
         log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
         solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
-        debug=False
+        debug=False,
     )
     assert solved
 
@@ -237,3 +237,49 @@ def test_cart_pole_train_a3c():
 
         file_name = os.path.join(utils.DEFAULT_DIR, "a3c_cart_pole.gif")
         utils.write_gif(result['frames'][::5], file_name, duration=1)
+
+
+# def test_cart_pole_train_a3c_accum():
+#     """
+#     Test that the multi-threaded version of the code can solve cart pole
+#     """
+#     agent_params = {
+#         'hidden_sizes': [128],
+#         'n_actions': 2,
+#         'n_state': 4,
+#         'gamma': 0.99,
+#         'entropy_weight': 0.00,
+#         'value_loss_clip': 2.0,
+#         'type': 'a2c-ffw',
+#     }
+#     train_params = {
+#         'optimizer': 'adamw',
+#         'lr': 4e-3,
+#         'weight_decay': 0.0,
+#     }
+
+#     env_name = 'CartPole-v1'
+#     n_workers = 4
+
+#     print("")  # For ease of reading
+#     agent, solved = a3c.train_loop_parallel(
+#         n_workers, agent_params, train_params, env_name,
+#         log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
+#         solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
+#         debug=False, accumulate_grads=True
+#     )
+#     assert solved
+
+#     make_gif = False
+#     if make_gif:
+#         import os
+#         render_mode = "human" if False else 'rgb_array'
+#         env = gym.make('CartPole-v1', render_mode=render_mode)
+#         env.reset(seed=101)
+#         result = a3c.agent_env_task(
+#             agent, env, parameters=None, state=None, t_max=1000,
+#             output_frames=True
+#         )
+
+#         file_name = os.path.join(utils.DEFAULT_DIR, "a3c_cart_pole.gif")
+#         utils.write_gif(result['frames'][::5], file_name, duration=1)
