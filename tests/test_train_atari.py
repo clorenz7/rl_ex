@@ -87,7 +87,7 @@ def test_space_invaders_a3c():
     print("")  # For ease of reading
     agent, solved = a3c.train_loop_parallel(
         n_workers, agent_params, train_params, env_params,
-        log_interval=10, seed=8888101888, total_step_limit=5000000,
+        log_interval=100, seed=8888101888, total_step_limit=5e9,
         steps_per_batch=5, avg_decay=0.95, eval_interval=10,
         # out_dir=os.path.join(DEFAULT_DIR, "a3c_test")
     )
