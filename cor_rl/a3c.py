@@ -59,13 +59,13 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
         t += 1
 
     if terminated:
-        value_est = 0.0
+        value_est = torch.tensor([0.0])
         state = None
     elif state is None:
         # Lost a life: episode restart. Take a few no-ops
         for _ in range(3):
             state, reward, terminated, _, _ = env.step(0)
-        value_est = 0.0
+        value_est = torch.tensor([0.0])
     else:
         # Get an estimate of the value of the final state
         with torch.no_grad():
@@ -100,8 +100,8 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     # This will run back prop
     if parameters is None:
         grads = None
-        loss = agent.calculate_loss(results)
         if not eval_mode:
+            loss = agent.calculate_loss(results)
             agent.backward(loss)
 
     else:
