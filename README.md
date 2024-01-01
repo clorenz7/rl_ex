@@ -34,5 +34,7 @@ Or
 Here is the command to start it. But start it away from the repo since it writes a lot of files!
 
 ```bash
+# Set mlflow storage directory. (Add to .zshrc)
+export MLFLOW_HOME=~/ml_flow
 mlflow server --host 127.0.0.1 --port 8888
 ```
