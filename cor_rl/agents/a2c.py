@@ -73,6 +73,14 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         self.reset()
 
+    def params(self):
+        return {
+            'clip_grad_norm': self.clip_grad_norm,
+            'reward_clip': self.reward_clip,
+            'lr': self.optimizer.param_groups[0]['lr'],
+            'optimizer': self.optimizer_name,
+        }
+
     def select_action(self, state=None):
         if state is not None:
             features = self.state_to_features(state)
@@ -206,16 +214,23 @@ class AdvantageActorCriticAgent(BaseAgent):
 
 
     def backward(self, loss=None):
+        metrics = {}
         if loss is not None:
             loss.backward()
             if self.clip_grad_norm > 0:
                 norm_val = nn.utils.clip_grad_norm_(
                     self.net.parameters(), self.clip_grad_norm
                 )
+                metrics['loss'] = loss.item()
+                metrics['grad_norm'] = norm_val.item()
+
         self.optimizer.step()
         # TODO: Add learning rate scheduler
 
         self.optimizer.zero_grad()
+
+        return metrics
+
 
     def zero_grad(self):
         self.optimizer.zero_grad()

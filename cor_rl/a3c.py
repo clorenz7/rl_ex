@@ -1,10 +1,12 @@
 from contextlib import contextmanager
+import datetime
 import math
 import multiprocessing
 import os
 import select
 import time
 
+import mlflow
 import torch
 
 import cor_rl.agents
@@ -13,6 +15,9 @@ from cor_rl.agents.a2c import (
     InteractionResult,
     AdvantageActorCriticAgent
 )
+
+MLFLOW_URI = "http://127.0.0.1:8888"
+mlflow.set_tracking_uri(uri=MLFLOW_URI)
 
 
 def interact(env, agent, t_max=5, state=None, output_frames=False,
@@ -96,13 +101,13 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     #     results, state, terminated, frames = interact(
     #         env, agent, t_max=t_max, state=state, output_frames=output_frames
     #     )
-
+    metrics = {}
     # This will run back prop
     if parameters is None:
         grads = None
         if not eval_mode:
             loss = agent.calculate_loss(results)
-            agent.backward(loss)
+            metrics = agent.backward(loss)
 
     else:
         grads, loss = agent.calc_and_get_grads(results)
@@ -115,6 +120,7 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
         'terminated': terminated,
         'n_steps': len(results.rewards),
     }
+    output.update(metrics)
 
     if output_frames:
         output['frames'] = frames
@@ -381,16 +387,30 @@ def _show_grads(result):
     import ipdb; ipdb.set_trace()
 
 
+def log_metrics(metrics, step):
+    for metric_name in ('grad_norm', 'loss'):
+        mlflow.log_metric(
+            metric_name, metrics[metric_name],
+            step=step, synchronous=False
+        )
+
+
 def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         steps_per_batch=5, total_step_limit=10000,
                         episode_limit=None, max_steps_per_episode=10000,
                         solved_thresh=None, log_interval=1e9, seed=8888,
                         avg_decay=0.95, debug=False, out_dir=None,
-                        eval_interval=None, accumulate_grads=False):
+                        eval_interval=None, accumulate_grads=False,
+                        experiment_name=None):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
     """
+
+    experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
+    mlflow.set_experiment(experiment_name)
+    agent_params['experiment_name'] = experiment_name
+    mlflow.start_run()
 
     eval_interval = eval_interval or float('inf')
     last_eval_time = -eval_interval if eval_interval < float('inf') else 0.0
@@ -404,6 +424,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     solved = False
     episode_limit = episode_limit or 1e9
     keep_training = True
+    metric_step_rate = 500
 
     # If global_agent is shared between threads rather that copied
     shared_mode = True
@@ -420,6 +441,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     if seed:
         torch.manual_seed(seed)
     global_agent = cor_rl.agents.factory(agent_params, train_params)
+    mlflow.log_params(global_agent.params())
     global_agent.zero_grad()
     if shared_mode:
         global_agent.share_memory()
@@ -461,6 +483,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
             # Get the result from each worker and update the model
             for w_idx in range(n_workers):
                 result = msg_pipes[w_idx].recv()
+
+                if total_steps % metric_step_rate == 0:
+                    log_metrics(result, step=total_steps)
+
                 if debug:
                     _show_grads(result)
 
@@ -478,6 +504,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 if result['terminated']:
                     total_episodes += 1
                     last_reward = ep_reward[w_idx]
+                    mlflow.log_metric(
+                        'ep_reward', last_reward,
+                        step=total_episodes, synchronous=False
+                    )
                     win_max_reward = max(last_reward, win_max_reward)
                     avg_reward = (
                         avg_decay * avg_reward +
@@ -518,6 +548,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         f"Std score: {result['std_score']:0.1f}\t"
                         f"Time: {last_eval_time:0.1f}min"
                     )
+                    mlflow.log_metric(
+                        'avg_score', result['avg_score'],
+                        step=eval_steps, synchronous=False
+                    )
                     eval_in_flight = False
 
             keep_training = (
@@ -525,6 +559,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 total_steps < total_step_limit and
                 total_episodes < episode_limit
             )
+
+    mlflow.end_run()
 
     if solved:
         print(

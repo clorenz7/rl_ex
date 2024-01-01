@@ -29,3 +29,10 @@ Or
 ### Atari Games
 
 
+### MLFlow Usage
+
+Here is the command to start it. But start it away from the repo since it writes a lot of files!
+
+```bash
+mlflow server --host 127.0.0.1 --port 8888
+```
