@@ -121,7 +121,7 @@ class AdvantageActorCriticAgent(BaseAgent):
             n_step_returns = (n_step_returns - n_step_returns.mean()) / std
 
         if self.value_loss_clip is None or self.value_loss_clip <= 0:
-            value_loss = F.mse_loss(value_est, n_step_returns)
+            value_loss = F.mse_loss(value_est, n_step_returns, reduction="none")
         else:
             value_loss = F.smooth_l1_loss(
                 value_est, n_step_returns,
