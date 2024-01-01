@@ -64,8 +64,8 @@ def test_space_invaders_a3c():
     agent_params = {
         'n_actions': 6,
         'gamma': 0.99,
-        'entropy_weight': 0.01,  # 0.05 saw things happening...
-        'clip_grad_norm': 0.05,
+        'entropy_weight': 0.01,
+        'clip_grad_norm': 0.02,
         'type': 'a2c-atari',
         'reward_clip': 1.0,
     }
