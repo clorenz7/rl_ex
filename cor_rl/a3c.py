@@ -354,6 +354,9 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
                 'rewards': result['rewards'],
             }
             conn.send(result)
+        elif task_type == "save":
+            agent.set_parameters(task['params'])
+            torch.save(agent.state_dict(), task['file_name'])
 
         elif task_type == 'params':
             params = agent.get_parameters()
@@ -401,7 +404,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         solved_thresh=None, log_interval=1e9, seed=8888,
                         avg_decay=0.95, debug=False, out_dir=None,
                         eval_interval=None, accumulate_grads=False,
-                        experiment_name=None):
+                        experiment_name=None, load_file=None):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
@@ -441,6 +444,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     if seed:
         torch.manual_seed(seed)
     global_agent = cor_rl.agents.factory(agent_params, train_params)
+    if load_file:
+        global_agent.load_state_dict(torch.load(load_file))
     mlflow.log_params(global_agent.params())
     global_agent.zero_grad()
     if shared_mode:
