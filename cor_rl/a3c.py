@@ -457,8 +457,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
         torch.manual_seed(seed)
     global_agent = cor_rl.agents.factory(agent_params, train_params)
     if load_file:
-        print(f"Loaded agent from {load_file}!")
-        global_agent.load_state_dict(torch.load(load_file))
+        print(f"Loading agent from {load_file}!")
+        global_agent.load(load_file)
     if use_mlflow:
         mlflow.log_params(global_agent.params())
     global_agent.zero_grad()
