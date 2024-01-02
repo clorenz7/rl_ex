@@ -491,7 +491,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
             elap_time = (time.time() - start_time) / 60
             n_epochs = total_steps / 4e6
             # do_eval = (elap_time - last_eval_time) > eval_interval
-            do_eval = (n_epochs - last_eval_epoch) > eval_interval
+            do_eval = (n_epochs - last_eval_epoch) >= eval_interval
             if do_eval:
                 params = global_agent.get_parameters()
                 payload = {
