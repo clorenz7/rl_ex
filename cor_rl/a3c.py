@@ -262,6 +262,142 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None):
             child_conns[i].close()
 
 
+class Worker:
+
+    def __init__(self, task_id, agent_params, train_params, env_params,
+                 agent=None, eval_mode=False):
+        self.eval_mode = eval_mode
+        self.shared_mode = agent is not None
+        # self.conn = conn
+        self.task_id = task_id
+        if eval_mode:
+            agent_params = dict(agent_params)
+            env_params = dict(env_params)
+            # Turn off reward clipping
+            env_params.pop('reward_clip', None)
+            agent_params['reward_clip'] = None
+
+        env_name = env_params.pop('env_name')
+        self.seed = env_params.pop('seed', 8888)
+        self.max_steps_per_episode = env_params.pop('max_steps_per_episode', 1e9)
+        self.env = environments.factory.get(env_name, **env_params)
+        self.ep_steps = 0
+        if self.seed:
+            self.task_seed = self.seed + task_id * 10
+            self.state, info = self.env.reset(seed=self.task_seed)
+            torch.manual_seed(self.task_seed)
+        if not eval_mode:
+            self.state = None  # Force reset to match previous work
+
+        if not self.shared_mode:
+            self.agent = cor_rl.agents.factory(agent_params, train_params)
+        else:
+            self.agent = agent
+        torch.manual_seed(self.task_seed)  # Reset seed to match previous work
+
+    def handle_task(self, task):
+        # task = self.conn.recv()
+        task_type = task.get('type', '')
+
+        if task_type == 'train':
+            # Allow controller to reset the environment
+            if task.get('reset', False):
+                self.state = None
+
+            # Train the agent for a few steps
+            params = None if self.shared_mode else task['params']
+            result = agent_env_task(
+                self.agent, self.env, params, self.state,
+                t_max=task['max_steps']
+            )
+            # Update the state for next time
+            self.state = result['state']
+            # Keep track of steps for this episode and end if too many
+            self.ep_steps += result['n_steps']
+            if self.ep_steps >= self.max_steps_per_episode:
+                self.state = None
+                result['terminated'] = True
+
+            # Restart counter if terminated
+            if result['terminated']:
+                self.ep_steps = 0
+
+            # Send result to parent process
+            # self.conn.send(result)
+            return result
+        elif task_type == 'eval':
+            if not self.eval_mode:
+                raise ValueError("You should be in eval mode!")
+
+            self.agent.set_parameters(task['params'])
+            if task.get('save_file'):
+                # torch.save(agent.state_dict(), task['save_file'])
+                self.agent.checkpoint(task['save_file'])
+
+            # Play N games and average the score
+            n_games = task.get('n_games', 8)
+            scores = []
+            with torch.no_grad():
+                for g_idx in range(n_games):
+                    result = agent_env_task(
+                        self.agent, self.env, None, state=self.state,
+                        t_max=100000, eval_mode=True
+                    )
+                    self.state = None
+                    scores.append(result['total_reward'])
+
+            avg_score = sum(scores) / n_games
+            std_scores = sum((s - avg_score)**2 for s in scores) / n_games
+            result = {
+                'scores': scores,
+                'avg_score': avg_score,
+                'std_score': math.sqrt(std_scores),
+                'reward_clip': self.agent.reward_clip,
+                'rewards': result['rewards'],
+            }
+            # self.conn.send(result)
+            return result
+        elif task_type == "save":
+            self.agent.set_parameters(task['params'])
+            # torch.save(agent.state_dict(), task['file_name'])
+            self.agent.checkpoint(task['file_name'])
+
+            return task['file_name']
+
+        elif task_type == 'params':
+            params = self.agent.get_parameters()
+            params['seed'] = [self.task_seed, self.seed]
+            params['state'] = [] if state is None else state.tolist()
+            # self.conn.send(params)
+            return params
+        elif task_type == 'state':
+            # self.conn.send([] if state is None else state.tolist())
+            return [] if state is None else state.tolist()
+        elif task_type == 'STOP':
+            # self.conn.send("FINISH HIM!")
+            return "FINISH HIM!"
+        else:
+            # self.conn.send("NO TYPE")
+            return "NO TYPE"
+
+
+def worker_thread_new(task_id, conn, agent_params, train_params, env_params,
+                      agent=None, eval_mode=False):
+
+    worker = Worker(
+        task_id, agent_params, train_params, env_params,
+        agent=agent, eval_mode=eval_mode
+    )
+
+    while True:
+        task = conn.recv()
+        if task.get('type', '') == 'STOP':
+            conn.send("FINISH HIM!")
+            break
+        result = worker.handle_task(task)
+        conn.send(result)
+
+
 def worker_thread(task_id, conn, agent_params, train_params, env_params,
                   agent=None, eval_mode=False):
     """
@@ -469,7 +605,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
         pipe_agent = None
 
     worker_args = [agent_params, train_params, env_params]
-    with piped_workers(n_workers, worker_thread, worker_args, agent=pipe_agent) as msg_pipes:
+    with piped_workers(n_workers, worker_thread_new, worker_args, agent=pipe_agent) as msg_pipes:
         start_time = time.time()
         while keep_training:
             if not shared_mode:
