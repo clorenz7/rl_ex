@@ -331,10 +331,14 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
             if not eval_mode:
                 raise ValueError("You should be in eval mode!")
 
-            # Play 5 games and average the score
+            agent.set_parameters(task['params'])
+            if task.get('save_file'):
+                # torch.save(agent.state_dict(), task['save_file'])
+                agent.checkpoint(task['save_file'])
+
+            # Play N games and average the score
             n_games = task.get('n_games', 8)
             scores = []
-            agent.set_parameters(task['params'])
             with torch.no_grad():
                 for g_idx in range(n_games):
                     result = agent_env_task(
@@ -356,7 +360,8 @@ def worker_thread(task_id, conn, agent_params, train_params, env_params,
             conn.send(result)
         elif task_type == "save":
             agent.set_parameters(task['params'])
-            torch.save(agent.state_dict(), task['file_name'])
+            # torch.save(agent.state_dict(), task['file_name'])
+            agent.checkpoint(task['file_name'])
 
         elif task_type == 'params':
             params = agent.get_parameters()
@@ -404,21 +409,25 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         solved_thresh=None, log_interval=1e9, seed=8888,
                         avg_decay=0.95, debug=False, out_dir=None,
                         eval_interval=None, accumulate_grads=False,
-                        experiment_name=None, load_file=None, save_interval=100000):
+                        experiment_name=None, load_file=None, save_interval=None,
+                        use_mlflow=True):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
 
+    eval_interval: in epochs (4M frames)
     save_interval: in epochs
     """
 
-    experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
-    mlflow.set_experiment(experiment_name)
-    agent_params['experiment_name'] = experiment_name
-    mlflow.start_run()
+    if use_mlflow:
+        experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
+        mlflow.set_experiment(experiment_name)
+        agent_params['experiment_name'] = experiment_name
+        mlflow.start_run()
 
+    save_interval = save_interval or float('inf')
     eval_interval = eval_interval or float('inf')
-    last_eval_time = -eval_interval if eval_interval < float('inf') else 0.0
+    last_eval_epoch = -eval_interval if eval_interval < float('inf') else 0.0
     last_save = 0
     eval_in_flight = False
 
@@ -448,8 +457,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
         torch.manual_seed(seed)
     global_agent = cor_rl.agents.factory(agent_params, train_params)
     if load_file:
+        print(f"Loaded agent from {load_file}!")
         global_agent.load_state_dict(torch.load(load_file))
-    mlflow.log_params(global_agent.params())
+    if use_mlflow:
+        mlflow.log_params(global_agent.params())
     global_agent.zero_grad()
     if shared_mode:
         global_agent.share_memory()
@@ -478,30 +489,32 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 msg_pipes[w_idx].send(payload)
 
             elap_time = (time.time() - start_time) / 60
-            do_eval = (elap_time - last_eval_time) > eval_interval
+            n_epochs = total_steps / 4e6
+            # do_eval = (elap_time - last_eval_time) > eval_interval
+            do_eval = (n_epochs - last_eval_epoch) > eval_interval
             if do_eval:
+                params = global_agent.get_parameters()
+                payload = {
+                    'type': 'eval', 'params': params
+                }
                 eval_steps = total_steps
+                do_save = (n_epochs - last_save) > save_interval
+                if do_save:
+                    save_file = os.path.join(out_dir, f'agent_epoch{last_save}.pt')
+                    last_save = round(n_epochs, 2)
+                    payload['save_file'] = save_file
+
                 # TODO: Make these pipes synchronous classes
                 # That store results on send and receive
-                params = global_agent.get_parameters()
-                msg_pipes[n_workers].send({'type': 'eval', 'params': params})
+                msg_pipes[n_workers].send(payload)
                 eval_in_flight = True
-                last_eval_time = elap_time
-
-            n_epochs = total_steps / 4e6
-            if (n_epochs - last_save) > save_interval and not eval_in_flight:
-                last_save = round(n_epochs)
-                params = global_agent.get_parameters()
-                msg_pipes[n_workers].send({
-                    'type': 'save', 'params': params,
-                    'file_name': os.path.join(out_dir, f'agent_epoch{last_save}.pt')
-                })
+                last_eval_epoch = round(n_epochs, 3)
 
             # Get the result from each worker and update the model
             for w_idx in range(n_workers):
                 result = msg_pipes[w_idx].recv()
 
-                if total_steps % metric_step_rate == 0:
+                if use_mlflow and total_steps % metric_step_rate == 0:
                     log_metrics(result, step=total_steps)
 
                 if debug:
@@ -521,10 +534,11 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 if result['terminated']:
                     total_episodes += 1
                     last_reward = ep_reward[w_idx]
-                    mlflow.log_metric(
-                        'ep_reward', last_reward,
-                        step=total_episodes, synchronous=False
-                    )
+                    if use_mlflow:
+                        mlflow.log_metric(
+                            'ep_reward', last_reward,
+                            step=total_episodes, synchronous=False
+                        )
                     win_max_reward = max(last_reward, win_max_reward)
                     avg_reward = (
                         avg_decay * avg_reward +
@@ -541,11 +555,11 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                             f'Time: {elap:0.1f}min'
                         )
                         win_max_reward = 0
-                        if out_dir:
-                            out_file = f"ep_{total_episodes}.chkpt"
-                            global_agent.checkpoint(
-                                os.path.join(out_dir, out_file)
-                            )
+                        # if out_dir:
+                        #     out_file = f"ep_{total_episodes}.chkpt"
+                        #     global_agent.checkpoint(
+                        #         os.path.join(out_dir, out_file)
+                        #     )
                 if solved:
                     break
             if (not shared_mode and accumulate_grads) and not solved:
@@ -563,12 +577,13 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         f"Epoch {eval_steps / 4e6:0.3f}\t"
                         f"Average score: {result['avg_score']:0.1f}\t"
                         f"Std score: {result['std_score']:0.1f}\t"
-                        f"Time: {last_eval_time:0.1f}min"
+                        f"Time: {last_eval_epoch:0.1f}min"
                     )
-                    mlflow.log_metric(
-                        'avg_score', result['avg_score'],
-                        step=eval_steps, synchronous=False
-                    )
+                    if use_mlflow:
+                        mlflow.log_metric(
+                            'avg_score', result['avg_score'],
+                            step=eval_steps, synchronous=False
+                        )
                     eval_in_flight = False
 
             keep_training = (
@@ -577,7 +592,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 total_episodes < episode_limit
             )
 
-    mlflow.end_run()
+    if use_mlflow:
+        mlflow.end_run()
 
     if solved:
         print(
