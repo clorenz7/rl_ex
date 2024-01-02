@@ -404,10 +404,12 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         solved_thresh=None, log_interval=1e9, seed=8888,
                         avg_decay=0.95, debug=False, out_dir=None,
                         eval_interval=None, accumulate_grads=False,
-                        experiment_name=None, load_file=None):
+                        experiment_name=None, load_file=None, save_interval=100000):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
+
+    save_interval: in epochs
     """
 
     experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
@@ -417,6 +419,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
 
     eval_interval = eval_interval or float('inf')
     last_eval_time = -eval_interval if eval_interval < float('inf') else 0.0
+    last_save = 0
     eval_in_flight = False
 
     solved_thresh = solved_thresh or float('inf')
@@ -484,6 +487,15 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 msg_pipes[n_workers].send({'type': 'eval', 'params': params})
                 eval_in_flight = True
                 last_eval_time = elap_time
+
+            n_epochs = total_steps / 4e6
+            if (n_epochs - last_save) > save_interval and not eval_in_flight:
+                last_save = round(n_epochs)
+                params = global_agent.get_parameters()
+                msg_pipes[n_workers].send({
+                    'type': 'save', 'params': params,
+                    'file_name': os.path.join(out_dir, f'agent_epoch{last_save}.pt')
+                })
 
             # Get the result from each worker and update the model
             for w_idx in range(n_workers):
