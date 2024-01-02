@@ -90,7 +90,7 @@ def test_space_invaders_a3c():
         log_interval=500, seed=8888101888,
         total_step_limit=5e9,
         steps_per_batch=5, avg_decay=0.95,
-        eval_interval=0.05, save_interval=0.05,
+        eval_interval=0.5, save_interval=2,
         out_dir=os.path.join(DEFAULT_DIR, "a3c_test"),
         use_mlflow=False
     )

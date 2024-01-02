@@ -576,7 +576,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                     print(
                         f"Epoch {eval_steps / 4e6:0.3f}\t"
                         f"Average score: {result['avg_score']:0.1f}\t"
-                        f"Std score: {result['std_score']:0.1f}\t"
+                        f"Std score: {result['std_score']:0.1f}  \t"
                         f"Time: {last_eval_epoch:0.1f}min"
                     )
                     if use_mlflow:
