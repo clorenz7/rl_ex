@@ -65,7 +65,7 @@ def test_space_invaders_a3c():
         'n_actions': 6,
         'gamma': 0.99,
         'entropy_weight': 0.01,
-        'clip_grad_norm': 0.02,
+        'clip_grad_norm': 0.005,
         'type': 'a2c-atari',
         'reward_clip': 1.0,
     }
@@ -92,6 +92,6 @@ def test_space_invaders_a3c():
         steps_per_batch=5, avg_decay=0.95,
         eval_interval=0.5, save_interval=2,
         out_dir=os.path.join(DEFAULT_DIR, "a3c_test"),
-        use_mlflow=False
+        use_mlflow=True
     )
     import ipdb; ipdb.set_trace()
