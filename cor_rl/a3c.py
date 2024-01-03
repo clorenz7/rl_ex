@@ -555,8 +555,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     save_interval: in epochs
     """
 
+    experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
     if use_mlflow:
-        experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
         mlflow.set_experiment(experiment_name)
         agent_params['experiment_name'] = experiment_name
         mlflow.start_run()
@@ -636,9 +636,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                 eval_steps = total_steps
                 do_save = (n_epochs - last_save) > save_interval
                 if do_save:
-                    save_file = os.path.join(out_dir, f'agent_epoch{last_save}.pt')
                     last_save = round(n_epochs, 2)
-                    payload['save_file'] = save_file
+                    payload['save_file'] = os.path.join(
+                        out_dir, f'{experiment_name}_epoch{last_save}.pt'
+                    )
 
                 # TODO: Make these pipes synchronous classes
                 # That store results on send and receive
