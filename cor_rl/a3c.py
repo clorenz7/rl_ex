@@ -367,12 +367,12 @@ class Worker:
         elif task_type == 'params':
             params = self.agent.get_parameters()
             params['seed'] = [self.task_seed, self.seed]
-            params['state'] = [] if state is None else state.tolist()
+            params['state'] = [] if self.state is None else self.state.tolist()
             # self.conn.send(params)
             return params
         elif task_type == 'state':
             # self.conn.send([] if state is None else state.tolist())
-            return [] if state is None else state.tolist()
+            return [] if self.state is None else self.state.tolist()
         elif task_type == 'STOP':
             # self.conn.send("FINISH HIM!")
             return "FINISH HIM!"
