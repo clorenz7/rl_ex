@@ -220,7 +220,7 @@ def test_cart_pole_train_a3c():
         n_workers, agent_params, train_params, env_name,
         log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
         solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
-        debug=False,
+        debug=False, use_mlflow=False
     )
     assert solved
 
