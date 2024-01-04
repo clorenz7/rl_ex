@@ -218,6 +218,45 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
     return global_agent, solved
 
 
+class PipeMock:
+    """
+    Objects to crudely mock the Pipe API to implement serial processing
+    """
+
+    def __init__(self, worker):
+        self.worker = worker
+        self.queue = []
+
+    def send(self, payload):
+        result = self.worker.handle_task(payload)
+        self.queue.append(result)
+
+    def recv(self):
+        result = self.queue.pop(0)
+        return result
+
+
+@contextmanager
+def serial_workers(n_workers, worker_func, worker_args, agent=None):
+    """
+    Implements serial workers via mocking the pipe API
+    """
+    # Setup training workers
+    workers = [
+        Worker(i, *worker_args, agent=agent) for i in range(n_workers)
+    ]
+    mock_pipes = [PipeMock(worker) for worker in workers]
+
+    # Add the evaluation worker
+    workers.append(Worker(0, *worker_args, eval_mode=True))
+    mock_pipes.append(PipeMock(workers[-1]))
+
+    try:
+        yield mock_pipes
+    finally:
+        pass
+
+
 @contextmanager
 def piped_workers(n_workers, worker_func, worker_args, agent=None):
     """
@@ -268,11 +307,10 @@ class Worker:
                  agent=None, eval_mode=False):
         self.eval_mode = eval_mode
         self.shared_mode = agent is not None
-        # self.conn = conn
         self.task_id = task_id
+        agent_params = dict(agent_params)
+        env_params = dict(env_params)
         if eval_mode:
-            agent_params = dict(agent_params)
-            env_params = dict(env_params)
             # Turn off reward clipping
             env_params.pop('reward_clip', None)
             agent_params['reward_clip'] = None
@@ -296,7 +334,6 @@ class Worker:
         torch.manual_seed(self.task_seed)  # Reset seed to match previous work
 
     def handle_task(self, task):
-        # task = self.conn.recv()
         task_type = task.get('type', '')
 
         if task_type == 'train':
@@ -323,7 +360,6 @@ class Worker:
                 self.ep_steps = 0
 
             # Send result to parent process
-            # self.conn.send(result)
             return result
         elif task_type == 'eval':
             if not self.eval_mode:
@@ -331,7 +367,6 @@ class Worker:
 
             self.agent.set_parameters(task['params'])
             if task.get('save_file'):
-                # torch.save(agent.state_dict(), task['save_file'])
                 self.agent.checkpoint(task['save_file'])
 
             # Play N games and average the score
@@ -355,11 +390,9 @@ class Worker:
                 'reward_clip': self.agent.reward_clip,
                 'rewards': result['rewards'],
             }
-            # self.conn.send(result)
             return result
         elif task_type == "save":
             self.agent.set_parameters(task['params'])
-            # torch.save(agent.state_dict(), task['file_name'])
             self.agent.checkpoint(task['file_name'])
 
             return task['file_name']
@@ -368,16 +401,12 @@ class Worker:
             params = self.agent.get_parameters()
             params['seed'] = [self.task_seed, self.seed]
             params['state'] = [] if self.state is None else self.state.tolist()
-            # self.conn.send(params)
             return params
         elif task_type == 'state':
-            # self.conn.send([] if state is None else state.tolist())
             return [] if self.state is None else self.state.tolist()
         elif task_type == 'STOP':
-            # self.conn.send("FINISH HIM!")
             return "FINISH HIM!"
         else:
-            # self.conn.send("NO TYPE")
             return "NO TYPE"
 
 
@@ -546,7 +575,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         avg_decay=0.95, debug=False, out_dir=None,
                         eval_interval=None, accumulate_grads=False,
                         experiment_name=None, load_file=None, save_interval=None,
-                        use_mlflow=True):
+                        use_mlflow=True, serial=False):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
@@ -605,7 +634,13 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
         pipe_agent = None
 
     worker_args = [agent_params, train_params, env_params]
-    with piped_workers(n_workers, worker_thread_new, worker_args, agent=pipe_agent) as msg_pipes:
+
+    if serial:
+        context_func = serial_workers
+    else:
+        context_func = piped_workers
+
+    with context_func(n_workers, worker_thread_new, worker_args, agent=pipe_agent) as msg_pipes:
         start_time = time.time()
         while keep_training:
             if not shared_mode:
