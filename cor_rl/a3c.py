@@ -64,13 +64,15 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
         t += 1
 
     if terminated:
-        value_est = torch.tensor([0.0])
+        # Having this be a float and not tensor is important for stability
+        value_est = 0.0
         state = None
     elif state is None:
         # Lost a life: episode restart. Take a few no-ops
         for _ in range(3):
             state, reward, terminated, _, _ = env.step(0)
-        value_est = torch.tensor([0.0])
+        # Having this be a float and not tensor is important for stability
+        value_est = 0.0
     else:
         # Get an estimate of the value of the final state
         with torch.no_grad():
