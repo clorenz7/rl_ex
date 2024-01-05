@@ -160,7 +160,7 @@ def test_cart_pole_train_arch():
     torch.manual_seed(543)
     agents = [cor_rl.agents.factory(agent_params, train_params)]
 
-    old = True
+    old = False
     if old:
         agent, solved = a3c.train_loop(
             global_agent, agents, [env],
@@ -175,7 +175,7 @@ def test_cart_pole_train_arch():
             1, agent_params, train_params, 'CartPole-v1',
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=10000000,
+            steps_per_batch=1250,
             debug=False, serial=True, seed=543, shared_mode=False
         )
 
