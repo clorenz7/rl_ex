@@ -42,6 +42,9 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
         action_idx, value_est, entropy, log_prob = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
 
+        if False and t == 0:
+            import ipdb; ipdb.set_trace()
+
         results.rewards.append(reward)
         results.values.append(value_est)
         results.log_probs.append(log_prob)
@@ -69,8 +72,10 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
         state = None
     elif state is None:
         # Lost a life: episode restart. Take a few no-ops
-        for _ in range(3):
-            state, reward, terminated, _, _ = env.step(0)
+
+        # for _ in range(3):
+        #     state, reward, terminated, _, _ = env.step(0)
+
         # Having this be a float and not tensor is important for stability
         value_est = 0.0
     else:
@@ -207,6 +212,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
 
             global_agent.set_grads(task_result['grads'])
             global_agent.backward()
+            # print(global_agent.net.value_head.weight[0, :5])
 
         if avg_reward > solved_thresh:
             print(f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\tAverage reward: {avg_reward:.2f}')
@@ -250,7 +256,7 @@ def serial_workers(n_workers, worker_func, worker_args, agent=None):
     mock_pipes = [PipeMock(worker) for worker in workers]
 
     # Add the evaluation worker
-    workers.append(Worker(0, *worker_args, eval_mode=True))
+    workers.append(Worker(n_workers-1, *worker_args, eval_mode=True))
     mock_pipes.append(PipeMock(workers[-1]))
 
     try:
@@ -559,7 +565,6 @@ def _show_grads(result):
     print("\nWorker Agent Grads:")
     for key, val in result['grads'].items():
         print(f'{key}: {torch.tensor(val).flatten()[:2]}')
-    import ipdb; ipdb.set_trace()
 
 
 def log_metrics(metrics, step):
@@ -577,13 +582,14 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         avg_decay=0.95, debug=False, out_dir=None,
                         eval_interval=None, accumulate_grads=False,
                         experiment_name=None, load_file=None, save_interval=None,
-                        use_mlflow=True, serial=False):
+                        use_mlflow=False, serial=False, shared_mode=True):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
 
     eval_interval: in epochs (4M frames)
     save_interval: in epochs
+    shared_mode: If global_agent is shared between threads rather that copied
     """
 
     experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
@@ -607,9 +613,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     episode_limit = episode_limit or 1e9
     keep_training = True
     metric_step_rate = 500
-
-    # If global_agent is shared between threads rather that copied
-    shared_mode = True
 
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -643,6 +646,9 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
         context_func = piped_workers
 
     with context_func(n_workers, worker_thread_new, worker_args, agent=pipe_agent) as msg_pipes:
+        # Set seed to have same action selection in serial (debugging) mode
+        if seed:
+            torch.manual_seed(seed)
         start_time = time.time()
         while keep_training:
             if not shared_mode:
@@ -700,6 +706,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                     else:
                         global_agent.set_grads(result['grads'])
                         global_agent.backward()
+                        # print(global_agent.net.value_head.weight[0, :5])
+                        # import ipdb; ipdb.set_trace()
 
                 # Update counters and print out if necessary
                 total_steps += result['n_steps']
@@ -739,6 +747,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
             if (not shared_mode and accumulate_grads) and not solved:
                 global_agent.backward()
 
+            # import ipdb; ipdb.set_trace()
             if eval_in_flight:
 
                 eval_conn = msg_pipes[n_workers]

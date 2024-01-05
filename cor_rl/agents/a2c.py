@@ -89,6 +89,7 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         pdf = Categorical(policy)
         action = pdf.sample()
+        # print((policy, action.item()))
         log_prob = pdf.log_prob(action)
         entropy = pdf.entropy()
 
