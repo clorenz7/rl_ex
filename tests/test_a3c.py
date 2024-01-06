@@ -225,7 +225,7 @@ def test_cart_pole_train_multi():
     env_name = 'CartPole-v1'
 
     old = False
-    steps_per_batch = 15
+    steps_per_batch = 5
 
     if old:
         global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
