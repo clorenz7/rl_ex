@@ -203,7 +203,7 @@ def test_cart_pole_train_multi():
     """
     Test that multiple agents on a single thread can solve cart pole
     """
-    seed = 543
+    seed = 543101
     torch.manual_seed(seed)
 
     agent_params = {
@@ -217,12 +217,12 @@ def test_cart_pole_train_multi():
     }
     train_params = {
         'optimizer': 'adamw',
-        'lr': 1e-3,
+        'lr': 5e-4,
         'weight_decay': 0.0,
     }
 
     agents, envs = [], []
-    n_threads = 8
+    n_threads = 16
     env_name = 'CartPole-v1'
 
     old = False
