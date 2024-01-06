@@ -203,7 +203,8 @@ def test_cart_pole_train_multi():
     """
     Test that multiple agents on a single thread can solve cart pole
     """
-    torch.manual_seed(543)
+    seed = 543
+    torch.manual_seed(seed)
 
     agent_params = {
         'type': 'a2c-ffw',
@@ -215,13 +216,13 @@ def test_cart_pole_train_multi():
         'value_loss_clip': 1.0,
     }
     train_params = {
-        'optimizer': 'adam',
+        'optimizer': 'adamw',
         'lr': 1e-3,
         'weight_decay': 0.0,
     }
 
     agents, envs = [], []
-    n_threads = 6
+    n_threads = 8
     env_name = 'CartPole-v1'
 
     old = False
@@ -230,7 +231,7 @@ def test_cart_pole_train_multi():
     if old:
         global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
         for ii in range(n_threads):
-            t_seed = 543 + 10 * ii
+            t_seed = seed + 10 * ii
             torch.manual_seed(t_seed)
             agents.append(
                 a3c.AdvantageActorCriticAgent(agent_params, train_params),
@@ -242,7 +243,7 @@ def test_cart_pole_train_multi():
             global_agent, agents, envs,
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=envs[0].spec.reward_threshold,
-            steps_per_batch=steps_per_batch, seed=543,
+            steps_per_batch=steps_per_batch, seed=seed,
             debug=False
         )
     else:
@@ -252,7 +253,7 @@ def test_cart_pole_train_multi():
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=gym.make(env_name).spec.reward_threshold,
             steps_per_batch=steps_per_batch,
-            debug=False, serial=True, seed=543, shared_mode=False
+            debug=False, serial=True, seed=seed, shared_mode=False
         )
 
     assert solved
