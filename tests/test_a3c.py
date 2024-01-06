@@ -231,7 +231,6 @@ def test_cart_pole_train_multi():
         global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
         for ii in range(n_threads):
             t_seed = 543 + 10 * ii
-            # t_seed = 543 + 101 * ii
             torch.manual_seed(t_seed)
             agents.append(
                 a3c.AdvantageActorCriticAgent(agent_params, train_params),
@@ -239,9 +238,6 @@ def test_cart_pole_train_multi():
             envs.append(gym.make(env_name))
             envs[-1].reset(seed=t_seed)
 
-        # ipdb> agents[1].net.base_layer[0].weight[:2,:]
-        # tensor([[ 0.0604, -0.3619,  0.2966, -0.4935],
-        #         [ 0.2108,  0.0493,  0.3187, -0.1849]], grad_fn=<SliceBackward0>)
         agent, solved = a3c.train_loop(
             global_agent, agents, envs,
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
@@ -249,22 +245,6 @@ def test_cart_pole_train_multi():
             steps_per_batch=steps_per_batch, seed=543,
             debug=False
         )
-        # After 1 batch:
-        # ipdb> states[0]
-        # array([ 0.01445378,  0.18729304, -0.03212173, -0.37609693], dtype=float32)
-        # ipdb> states[1]
-        # array([ 0.00486106,  0.971259  , -0.04166358, -1.4610286 ], dtype=float32)
-        # Progression:
-        # tests/test_a3c.py::test_cart_pole_train_multi
-        # Episode 100   Max reward: 64.00   Average reward: 14.95    Time: 0.0min
-        # Episode 200   Max reward: 36.00   Average reward: 11.92    Time: 0.0min
-        # Episode 300   Max reward: 120.00  Average reward: 20.41    Time: 0.0min
-        # Episode 400   Max reward: 331.00  Average reward: 88.80    Time: 0.1min
-        # Episode 500   Max reward: 440.00  Average reward: 75.87    Time: 0.1min
-        # Episode 600   Max reward: 1141.00 Average reward: 203.61   Time: 0.2min
-        # Episode 700   Max reward: 2962.00 Average reward: 472.54   Time: 0.4min
-        # Episode 770   Last reward: 5013.00    Average reward: 478.42
-        # PROBLEM SOLVED in 29.3sec
     else:
         print("")
         agent, solved = a3c.train_loop_parallel(
@@ -274,37 +254,6 @@ def test_cart_pole_train_multi():
             steps_per_batch=steps_per_batch,
             debug=False, serial=True, seed=543, shared_mode=False
         )
-        # After 1 batch:
-        # ipdb> msg_pipes[0].worker.state
-        # array([-0.00115787, -0.20325479, -0.00865413,  0.2161426 ], dtype=float32)
-        # ipdb> msg_pipes[1].worker.state
-        # array([-0.04978548, -0.5908184 ,  0.04057004,  0.90578496], dtype=float32)
-
-        # Initial Selections:
-        # (tensor(-0.6909, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.7129, grad_fn=<SqueezeBackward1>), 1)
-        # (tensor(-0.6909, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.6746, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.7389, grad_fn=<SqueezeBackward1>), 1)
-        # tensor([-0.1966, -0.4916,  0.2373,  0.1841], grad_fn=<SliceBackward0>)
-        # (tensor(-0.6887, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.7181, grad_fn=<SqueezeBackward1>), 1)
-        # (tensor(-0.6884, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.6676, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.6399, grad_fn=<SqueezeBackward1>), 0)
-        # tensor([-0.1970, -0.4926,  0.2372,  0.1850], grad_fn=<SliceBackward0>)
-        # (tensor(-0.7008, grad_fn=<SqueezeBackward1>), 1)
-        # (tensor(-0.6945, grad_fn=<SqueezeBackward1>), 1)
-        # (tensor(-0.6963, grad_fn=<SqueezeBackward1>), 1)
-        # (tensor(-0.6854, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.6942, grad_fn=<SqueezeBackward1>), 1)
-        # tensor([-0.1973, -0.4932,  0.2370,  0.1856], grad_fn=<SliceBackward0>)
-        # (tensor(-0.6378, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.7783, grad_fn=<SqueezeBackward1>), 1)
-        # (tensor(-0.7522, grad_fn=<SqueezeBackward1>), 1)
-        # (tensor(-0.6507, grad_fn=<SqueezeBackward1>), 0)
-        # (tensor(-0.6375, grad_fn=<SqueezeBackward1>), 0)
-        # tensor([-0.1975, -0.4940,  0.2368,  0.1862], grad_fn=<SliceBackward0>)
 
     assert solved
 

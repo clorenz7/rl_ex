@@ -194,8 +194,6 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
 
             global_agent.set_grads(task_result['grads'])
             global_agent.backward()
-            # print(global_agent.net.base_layer[0].weight[0, :])
-            # print(global_agent.net.value_head.weight[0, :5])
 
             if states[t_idx] is None:
                 last_reward = ep_rewards[t_idx]
@@ -676,7 +674,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                     result = msg_pipes[w_idx].queue[0]
                     global_agent.set_grads(result['grads'])
                     global_agent.backward()
-                    # print(global_agent.net.base_layer[0].weight[0, :])
 
             elap_time = (time.time() - start_time) / 60
             n_epochs = total_steps / 4e6
@@ -695,8 +692,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         out_dir, f'{experiment_name}_epoch{last_save}.pt'
                     )
 
-                # TODO: Make these pipes synchronous classes
-                # That store results on send and receive
                 msg_pipes[n_workers].send(payload)
                 eval_in_flight = True
                 last_eval_epoch = round(n_epochs, 3)
@@ -719,9 +714,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         # For repro purposes
                         # global_agent.set_grads(result['grads'])
                         # global_agent.backward()
-
-                        # print(global_agent.net.value_head.weight[0, :5])
-                        # import ipdb; ipdb.set_trace()
 
                 # Update counters and print out if necessary
                 total_steps += result['n_steps']
@@ -762,7 +754,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
             if (not shared_mode and accumulate_grads) and not solved:
                 global_agent.backward()
 
-            # import ipdb; ipdb.set_trace()
             if eval_in_flight:
 
                 eval_conn = msg_pipes[n_workers]
