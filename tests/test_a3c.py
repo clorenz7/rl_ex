@@ -212,20 +212,20 @@ def test_cart_pole_train_multi():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'value_loss_clip': 2.0,
+        'value_loss_clip': 1.0,
     }
     train_params = {
-        'optimizer': 'adamw',
-        'lr': 5e-4,  # 1e-3,
+        'optimizer': 'adam',
+        'lr': 1e-3,
         'weight_decay': 0.0,
     }
 
     agents, envs = [], []
-    n_threads = 3
+    n_threads = 6
     env_name = 'CartPole-v1'
 
     old = False
-    steps_per_batch = 25
+    steps_per_batch = 15
 
     if old:
         global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
