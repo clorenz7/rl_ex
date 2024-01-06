@@ -41,9 +41,10 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
         # Run network
         action_idx, value_est, entropy, log_prob = agent.select_action(state)
         state, reward, terminated, _, _ = env.step(action_idx)
+        # print((log_prob, action_idx))
 
-        if False and t == 0:
-            import ipdb; ipdb.set_trace()
+        # if False and t == 0:
+        #     import ipdb; ipdb.set_trace()
 
         results.rewards.append(reward)
         results.values.append(value_est)
@@ -66,11 +67,13 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
                 results.entropies.append(0.0)
         t += 1
 
+
     if terminated:
         # Having this be a float and not tensor is important for stability
         value_est = 0.0
         state = None
     elif state is None:
+        import ipdb; ipdb.set_trace()
         # Lost a life: episode restart. Take a few no-ops
 
         # for _ in range(3):
@@ -154,6 +157,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
     solved = False
 
     n_threads = len(agents)
+    ep_rewards = [0] * n_threads
     states = [None] * n_threads
     print("")
 
@@ -179,8 +183,7 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
                 t_max=steps_per_batch
             )
             n_steps = task_result['n_steps']
-            ep_reward += task_result['total_reward']
-            max_reward = max(max_reward, ep_reward)
+            ep_rewards[t_idx] += task_result['total_reward']
             ep_steps += n_steps
             total_steps += n_steps
             if ep_steps >= max_ep_steps:
@@ -189,10 +192,16 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
             else:
                 states[t_idx] = task_result['state']
 
+            global_agent.set_grads(task_result['grads'])
+            global_agent.backward()
+            # print(global_agent.net.base_layer[0].weight[0, :])
+            # print(global_agent.net.value_head.weight[0, :5])
+
             if states[t_idx] is None:
-                last_reward = ep_reward
+                last_reward = ep_rewards[t_idx]
+                max_reward = max(max_reward, last_reward)
                 avg_reward = (
-                    avg_decay * avg_reward + (1.0 - avg_decay) * ep_reward
+                    avg_decay * avg_reward + (1.0 - avg_decay) * last_reward
                 )
                 n_episodes += 1
                 if (n_episodes % log_interval) == 0:
@@ -202,17 +211,13 @@ def train_loop(global_agent: AdvantageActorCriticAgent, agents, envs,
                         f'Average reward: {avg_reward:.2f}\t Time: {elap:0.1f}min'
                     )
                     max_reward = 0
-                ep_steps = ep_reward = 0
+                ep_steps = ep_rewards[t_idx] = 0
 
             if debug:
                 print(f"State: {states[t_idx]}")
                 print("\nWorker Agent Grads:")
                 for key, val in task_result['grads'].items():
                     print(f'{key}: {torch.tensor(val).flatten()[:2]}')
-
-            global_agent.set_grads(task_result['grads'])
-            global_agent.backward()
-            # print(global_agent.net.value_head.weight[0, :5])
 
         if avg_reward > solved_thresh:
             print(f'Episode {n_episodes}\tLast reward: {last_reward:.2f}\tAverage reward: {avg_reward:.2f}')
@@ -666,6 +671,12 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
             }
             for w_idx in range(n_workers):
                 msg_pipes[w_idx].send(payload)
+                if not shared_mode:
+                    # For serial repro purposes
+                    result = msg_pipes[w_idx].queue[0]
+                    global_agent.set_grads(result['grads'])
+                    global_agent.backward()
+                    # print(global_agent.net.base_layer[0].weight[0, :])
 
             elap_time = (time.time() - start_time) / 60
             n_epochs = total_steps / 4e6
@@ -704,8 +715,11 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                     if accumulate_grads:
                         global_agent.accumulate_grads(result['grads'])
                     else:
-                        global_agent.set_grads(result['grads'])
-                        global_agent.backward()
+                        pass
+                        # For repro purposes
+                        # global_agent.set_grads(result['grads'])
+                        # global_agent.backward()
+
                         # print(global_agent.net.value_head.weight[0, :5])
                         # import ipdb; ipdb.set_trace()
 
@@ -729,6 +743,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                     solved = avg_reward > solved_thresh
                     ep_steps[w_idx] = ep_reward[w_idx] = 0
                     if (total_episodes % log_interval) == 0:
+
                         elap = (time.time() - start_time) / 60
                         print(
                             f'Episode {total_episodes}\t'
