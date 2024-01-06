@@ -217,7 +217,7 @@ def test_cart_pole_train_multi():
     }
     train_params = {
         'optimizer': 'adamw',
-        'lr': 5e-4 * 2,
+        'lr': 1e-3,
         'weight_decay': 0.0,
     }
 
