@@ -141,11 +141,13 @@ class AdvantageActorCriticAgent(BaseAgent):
         advantage = n_step_returns - value_est.detach()
         policy_loss = -torch.hstack(results.log_probs) * advantage
 
-        loss = value_loss.sum() + policy_loss.sum()
+        # loss = value_loss.sum() + policy_loss.sum()
+        loss = value_loss.mean() + policy_loss.mean()
 
         if self.entropy_weight > 0:
             entropy_loss = torch.hstack(results.entropies)
-            loss = loss - entropy_loss.sum() * self.entropy_weight
+            # loss = loss - entropy_loss.sum() * self.entropy_weight
+            loss = loss - entropy_loss.mean() * self.entropy_weight
 
         return loss
 
@@ -222,6 +224,7 @@ class AdvantageActorCriticAgent(BaseAgent):
                 norm_val = nn.utils.clip_grad_norm_(
                     self.net.parameters(), self.clip_grad_norm
                 )
+
                 metrics['loss'] = loss.item()
                 metrics['grad_norm'] = norm_val.item()
 
