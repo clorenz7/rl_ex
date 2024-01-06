@@ -216,7 +216,7 @@ def test_cart_pole_train_multi():
     }
     train_params = {
         'optimizer': 'adamw',
-        'lr': 1e-3,
+        'lr': 5e-4,  # 1e-3,
         'weight_decay': 0.0,
     }
 
@@ -225,7 +225,7 @@ def test_cart_pole_train_multi():
     env_name = 'CartPole-v1'
 
     old = False
-    steps_per_batch = 125
+    steps_per_batch = 25
 
     if old:
         global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
