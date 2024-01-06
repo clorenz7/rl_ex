@@ -38,7 +38,7 @@ def test_cart_pole_eval():
     train_params = {
         'optimizer': 'rmsprop'
     }
-    agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
+    agent = a2c.AdvantageActorCriticAgent(agent_params, train_params)
 
     result = a3c.agent_env_task(agent, env, parameters=None, state=None)
     # Just make sure that we can evaluate the agent and get grads
