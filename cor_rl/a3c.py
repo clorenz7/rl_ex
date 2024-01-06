@@ -54,23 +54,26 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
                 # Lost a life: episode restart
                 break
             else:
-                # Do a no-op to get some data
-                state, reward, terminated, _, _ = env.step(0)
+                # Do a no-op to get some data and avoid triggering
+                # environment reset. This is for eval mode
+                state, reward, terminated_no_op, _, _ = env.step(0)
                 results.rewards.append(reward)
                 results.values.append(0.0)
                 results.log_probs.append(0.0)
                 results.entropies.append(0.0)
         t += 1
 
-
     if terminated:
         # Having this be a float and not tensor is important for stability
         value_est = 0.0
         state = None
     elif state is None:
-        # Lost a life: episode restart. Take a few no-ops
-        # for _ in range(3):
-        #     state, reward, terminated, _, _ = env.step(0)
+        # Lost a life: episode restart. Take a no-op so state is not None
+        # so that it doesn't trigger an environment reset
+        for _ in range(1):
+            state, reward, terminated_no_op, _, _ = env.step(0)
+            # Just in case there were points scored after death
+            results.rewards[-1] += reward
 
         # Having this be a float and not tensor is important for stability
         value_est = 0.0
@@ -144,13 +147,15 @@ class PipeMock:
 
 
 @contextmanager
-def serial_workers(n_workers, worker_func, worker_args, agent=None):
+def serial_workers(n_workers, worker_func, worker_args, agent=None, render=False):
     """
     Implements serial workers via mocking the pipe API
     """
     # Setup training workers
+    # render_mode='human' if i == 0 else None
     workers = [
-        Worker(i, *worker_args, agent=agent) for i in range(n_workers)
+        Worker(i, *worker_args, agent=agent, render=render)
+        for i in range(n_workers)
     ]
     mock_pipes = [PipeMock(worker) for worker in workers]
 
@@ -165,7 +170,7 @@ def serial_workers(n_workers, worker_func, worker_args, agent=None):
 
 
 @contextmanager
-def piped_workers(n_workers, worker_func, worker_args, agent=None):
+def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False):
     """
     Context manager to manage a set of training worker threads.
 
@@ -183,7 +188,7 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None):
         worker_process = multiprocessing.Process(
             target=worker_func,
             args=[i, child_conn, *worker_args],
-            kwargs={"agent": agent},
+            kwargs={"agent": agent, "render": render},
         )
         worker_processes.append(worker_process)
         worker_process.start()
@@ -211,7 +216,7 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None):
 class Worker:
 
     def __init__(self, task_id, agent_params, train_params, env_params,
-                 agent=None, eval_mode=False):
+                 agent=None, eval_mode=False, render=False):
         self.eval_mode = eval_mode
         self.shared_mode = agent is not None
         self.task_id = task_id
@@ -221,6 +226,9 @@ class Worker:
             # Turn off reward clipping
             env_params.pop('reward_clip', None)
             agent_params['reward_clip'] = None
+
+        if render and task_id == 0:
+            env_params['render_mode'] = 'human'
 
         env_name = env_params.pop('env_name')
         self.seed = env_params.pop('seed', 8888)
@@ -318,11 +326,11 @@ class Worker:
 
 
 def worker_thread_new(task_id, conn, agent_params, train_params, env_params,
-                      agent=None, eval_mode=False):
+                      agent=None, eval_mode=False, render=False):
 
     worker = Worker(
         task_id, agent_params, train_params, env_params,
-        agent=agent, eval_mode=eval_mode
+        agent=agent, eval_mode=eval_mode, render=render
     )
 
     while True:
@@ -366,7 +374,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         avg_decay=0.95, debug=False, out_dir=None,
                         eval_interval=None, accumulate_grads=False,
                         experiment_name=None, load_file=None, save_interval=None,
-                        use_mlflow=False, serial=False, shared_mode=True):
+                        use_mlflow=False, serial=False, shared_mode=True, render=False):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
@@ -429,7 +437,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     else:
         context_func = piped_workers
 
-    with context_func(n_workers, worker_thread_new, worker_args, agent=pipe_agent) as msg_pipes:
+    with context_func(n_workers, worker_thread_new, worker_args, agent=pipe_agent, render=render) as msg_pipes:
         # Set seed to have same action selection in serial (debugging) mode
         if seed:
             torch.manual_seed(seed)
@@ -480,7 +488,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
             # Get the result from each worker and update the model
             for w_idx in range(n_workers):
                 result = msg_pipes[w_idx].recv()
-
                 if use_mlflow and total_steps % metric_step_rate == 0:
                     log_metrics(result, step=total_steps)
 
@@ -512,7 +519,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         (1.0 - avg_decay) * last_reward
                     )
                     solved = avg_reward > solved_thresh
-                    ep_steps[w_idx] = ep_reward[w_idx] = 0
+                    ep_steps[w_idx] = 0
+                    ep_reward[w_idx] = 0
                     if (total_episodes % log_interval) == 0:
 
                         elap = (time.time() - start_time) / 60
