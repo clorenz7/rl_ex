@@ -1,7 +1,8 @@
 from contextlib import contextmanager
 import datetime
 import math
-import multiprocessing
+# import multiprocessing as mp
+import torch.multiprocessing as mp
 import os
 import select
 import time
@@ -19,8 +20,24 @@ MLFLOW_URI = "http://127.0.0.1:8888"
 mlflow.set_tracking_uri(uri=MLFLOW_URI)
 
 
+@contextmanager
+def no_op_context():
+    # This function does nothing before yielding
+    yield
+
+
+class NoOpContextManager:
+    def __enter__(self):
+        # No setup or actions to perform
+        pass
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # No teardown or actions to perform
+        pass
+
+
 def interact(env, agent, t_max=5, state=None, output_frames=False,
-             break_on_lost_life=True):
+             break_on_lost_life=True, lock=None):
     """
     Does t_max steps of the agent in the environment.
     This is single threaded.
@@ -38,7 +55,7 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
 
     while t < t_max and not terminated:
         # Run network
-        action_idx, value_est, entropy, log_prob = agent.select_action(state)
+        action_idx, value_est, entropy, log_prob = agent.select_action(state, lock=lock)
         state, reward, terminated, _, _ = env.step(action_idx)
 
         results.rewards.append(reward)
@@ -80,7 +97,7 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
     else:
         # Get an estimate of the value of the final state
         with torch.no_grad():
-            action_idx, value_est, _, _ = agent.select_action(state)
+            action_idx, value_est, _, _ = agent.select_action(state, lock=lock)
         value_est = value_est.item()
 
     results.values.append(value_est)
@@ -89,7 +106,9 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
 
 
 def agent_env_task(agent, env, parameters, state, t_max=5,
-                   output_frames=False, eval_mode=False):
+                   output_frames=False, eval_mode=False, lock=None):
+
+    lock = lock or NoOpContextManager()
 
     if parameters is not None:
         agent.set_parameters(parameters)
@@ -98,7 +117,9 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
 
     results, state, terminated, frames = interact(
         env, agent, t_max=t_max, state=state, output_frames=output_frames,
-        break_on_lost_life=not eval_mode
+        break_on_lost_life=not eval_mode,
+        lock=None,  # Do not typically lock on forward pass
+        # lock=lock
     )
 
     metrics = {}
@@ -106,8 +127,10 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
     if parameters is None:
         grads = None
         if not eval_mode:
+            # with lock:
             loss = agent.calculate_loss(results)
-            metrics = agent.backward(loss)
+            with lock:  # TODO: Probably only need to do here.
+                metrics = agent.backward(loss)
 
     else:
         grads, loss = agent.calc_and_get_grads(results)
@@ -179,24 +202,24 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False)
 
     parent_conns, child_conns = [], []
     worker_processes = []
+    lock = mp.Lock()
 
     for i in range(n_workers):
-        parent_conn, child_conn = multiprocessing.Pipe()
+        parent_conn, child_conn = mp.Pipe()
         parent_conns.append(parent_conn)
         child_conns.append(child_conn)
-
-        worker_process = multiprocessing.Process(
+        worker_process = mp.Process(
             target=worker_func,
             args=[i, child_conn, *worker_args],
-            kwargs={"agent": agent, "render": render},
+            kwargs={"agent": agent, "render": render, "lock": lock},
         )
         worker_processes.append(worker_process)
         worker_process.start()
 
-    parent_conn, child_conn = multiprocessing.Pipe()
+    parent_conn, child_conn = mp.Pipe()
     parent_conns.append(parent_conn)
     child_conns.append(child_conn)
-    eval_process = multiprocessing.Process(
+    eval_process = mp.Process(
         target=worker_func,
         args=[0, child_conn, *worker_args],
         kwargs={'eval_mode': True},
@@ -216,10 +239,11 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False)
 class Worker:
 
     def __init__(self, task_id, agent_params, train_params, env_params,
-                 agent=None, eval_mode=False, render=False):
+                 agent=None, eval_mode=False, render=False, lock=None):
         self.eval_mode = eval_mode
         self.shared_mode = agent is not None
         self.task_id = task_id
+        self.lock = lock
         agent_params = dict(agent_params)
         env_params = dict(env_params)
         if eval_mode:
@@ -260,7 +284,7 @@ class Worker:
             params = None if self.shared_mode else task['params']
             result = agent_env_task(
                 self.agent, self.env, params, self.state,
-                t_max=task['max_steps']
+                t_max=task['max_steps'], lock=self.lock
             )
             # Update the state for next time
             self.state = result['state']
@@ -326,11 +350,11 @@ class Worker:
 
 
 def worker_thread_new(task_id, conn, agent_params, train_params, env_params,
-                      agent=None, eval_mode=False, render=False):
+                      agent=None, eval_mode=False, render=False, lock=None):
 
     worker = Worker(
         task_id, agent_params, train_params, env_params,
-        agent=agent, eval_mode=eval_mode, render=render
+        agent=agent, eval_mode=eval_mode, render=render, lock=lock
     )
 
     while True:
@@ -399,12 +423,13 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     solved_thresh = solved_thresh or float('inf')
     total_steps = total_episodes = 0
     ep_steps, ep_reward = [0]*n_workers, [0]*n_workers
-    avg_reward = 0
+    avg_reward = None
     win_max_reward = max_reward = 0
     solved = False
     episode_limit = episode_limit or 1e9
     keep_training = True
     metric_step_rate = 500
+    last_flow_log = -metric_step_rate
 
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -488,7 +513,14 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
             # Get the result from each worker and update the model
             for w_idx in range(n_workers):
                 result = msg_pipes[w_idx].recv()
-                if use_mlflow and total_steps % metric_step_rate == 0:
+                # if result['loss'] > 100:
+                #     import ipdb; ipdb.set_trace()
+                do_log = (
+                    result['loss'] > 1000 or
+                    (total_steps - last_flow_log) >= metric_step_rate
+                )
+                if use_mlflow and do_log:
+                    last_flow_log = total_steps
                     log_metrics(result, step=total_steps)
 
                 if debug:
@@ -514,6 +546,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                             step=total_episodes, synchronous=False
                         )
                     win_max_reward = max(last_reward, win_max_reward)
+                    if avg_reward is None:
+                        avg_reward = last_reward
                     avg_reward = (
                         avg_decay * avg_reward +
                         (1.0 - avg_decay) * last_reward
@@ -526,6 +560,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         elap = (time.time() - start_time) / 60
                         print(
                             f'Episode {total_episodes}\t'
+                            f'Steps: {total_steps}\t'
                             f'Average reward: {avg_reward:.2f}\t'
                             f'Max reward: {win_max_reward:.2f}\t'
                             f'Time: {elap:0.1f}min'
