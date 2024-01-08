@@ -137,7 +137,7 @@ def agent_env_task(agent: AdvantageActorCriticAgent, shared_agent: AdvantageActo
 
     # else:
     #     grads, loss = agent.calc_and_get_grads(results)
-
+    grads = None
     if not eval_mode:
         # shared_opt.zero_grad()
         loss, norm_val = agent.calc_loss_and_backprop(results)
@@ -145,7 +145,7 @@ def agent_env_task(agent: AdvantageActorCriticAgent, shared_agent: AdvantageActo
             shared_opt.zero_grad(set_to_none=True)
             agent.sync_grads(shared_agent)
             shared_opt.step()
-        grads = None
+
         metrics['loss'] = loss.item()
         metrics['grad_norm'] = norm_val.item()
 
@@ -335,7 +335,7 @@ class Worker:
                 for g_idx in range(n_games):
                     result = agent_env_task(
                         self.agent, self.shared_agent, self.shared_opt,
-                        self.env, None, state=self.state,
+                        self.env, state=self.state,
                         t_max=100000, eval_mode=True
                     )
                     self.state = None

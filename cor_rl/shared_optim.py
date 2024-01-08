@@ -130,7 +130,8 @@ class SharedRMSprop(optim.RMSprop):
                     grad = grad.add(group['weight_decay'], p.data)
 
                 # Decay the first and second moment running average coefficient
-                exp_avg_sq.mul_(alpha).addcmul_(1 - alpha, grad, grad)
+                # exp_avg_sq.mul_(alpha).addcmul_(1 - alpha, grad, grad)
+                exp_avg_sq.mul_(alpha).addcmul_(grad, grad, value=1 - alpha)
                 # exp_avg.mul_(mu).add_(1 - mu, grad)
                 exp_avg.mul_(mu).add_(grad, alpha=1 - mu)
 
@@ -142,6 +143,7 @@ class SharedRMSprop(optim.RMSprop):
                 #     bias_correction2) / bias_correction1
                 step_size = group['lr']
 
-                p.data.addcdiv_(-step_size, exp_avg, denom)
+                # p.data.addcdiv_(-step_size, exp_avg, denom)
+                p.data.addcdiv_(exp_avg, denom, value=-step_size)
 
         return loss

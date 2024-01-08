@@ -59,7 +59,7 @@ def test_space_invaders_a3c():
         'n_actions': 6,
         'gamma': 0.99,
         'entropy_weight': 0.01,
-        'clip_grad_norm': 5.0,
+        'clip_grad_norm': 50.0,
         'type': 'a2c-atari',
         'reward_clip': 1.0,
         'n_exp_steps': 5.0,
