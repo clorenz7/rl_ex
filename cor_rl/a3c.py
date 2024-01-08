@@ -14,6 +14,7 @@ import cor_rl.agents
 from cor_rl import environments
 from cor_rl.agents.a2c import (
     InteractionResult,
+    AdvantageActorCriticAgent
 )
 
 MLFLOW_URI = "http://127.0.0.1:8888"
@@ -105,13 +106,16 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
     return results, state, terminated, frame_buffer
 
 
-def agent_env_task(agent, env, parameters, state, t_max=5,
+def agent_env_task(agent: AdvantageActorCriticAgent, shared_agent: AdvantageActorCriticAgent,
+                   shared_opt, env, state, t_max=5,
                    output_frames=False, eval_mode=False, lock=None):
 
     lock = lock or NoOpContextManager()
+    # lock = NoOpContextManager()
 
-    if parameters is not None:
-        agent.set_parameters(parameters)
+    # if parameters is not None:
+    #     agent.set_parameters(parameters)
+    agent.set_parameters(shared_agent.get_parameters())
 
     agent.zero_grad()
 
@@ -119,21 +123,31 @@ def agent_env_task(agent, env, parameters, state, t_max=5,
         env, agent, t_max=t_max, state=state, output_frames=output_frames,
         break_on_lost_life=not eval_mode,
         lock=None,  # Do not typically lock on forward pass
-        # lock=lock
     )
 
     metrics = {}
-    # This will run back prop
-    if parameters is None:
-        grads = None
-        if not eval_mode:
-            # with lock:
-            loss = agent.calculate_loss(results)
-            with lock:  # TODO: Probably only need to do here.
-                metrics = agent.backward(loss)
+    # # This will run back prop
+    # if parameters is None:
+    #     grads = None
+    #     if not eval_mode:
+    #         # with lock:
+    #         loss = agent.calculate_loss(results)
+    #         with lock:  # TODO: Probably only need to do here.
+    #             metrics = agent.backward(loss)
 
-    else:
-        grads, loss = agent.calc_and_get_grads(results)
+    # else:
+    #     grads, loss = agent.calc_and_get_grads(results)
+
+    if not eval_mode:
+        # shared_opt.zero_grad()
+        loss, norm_val = agent.calc_loss_and_backprop(results)
+        with lock:
+            shared_opt.zero_grad(set_to_none=True)
+            agent.sync_grads(shared_agent)
+            shared_opt.step()
+        grads = None
+        metrics['loss'] = loss.item()
+        metrics['grad_norm'] = norm_val.item()
 
     output = {
         'grads': grads,
@@ -170,20 +184,20 @@ class PipeMock:
 
 
 @contextmanager
-def serial_workers(n_workers, worker_func, worker_args, agent=None, render=False):
+def serial_workers(n_workers, worker_func, worker_args, agent=None, render=False, **kwargs):
     """
     Implements serial workers via mocking the pipe API
     """
     # Setup training workers
     # render_mode='human' if i == 0 else None
     workers = [
-        Worker(i, *worker_args, agent=agent, render=render)
+        Worker(i, *worker_args, shared_agent=agent, shared_opt=agent.optimizer, render=render)
         for i in range(n_workers)
     ]
     mock_pipes = [PipeMock(worker) for worker in workers]
 
     # Add the evaluation worker
-    workers.append(Worker(n_workers-1, *worker_args, eval_mode=True))
+    workers.append(Worker(n_workers-1, *worker_args, shared_agent=agent, eval_mode=True))
     mock_pipes.append(PipeMock(workers[-1]))
 
     try:
@@ -193,7 +207,7 @@ def serial_workers(n_workers, worker_func, worker_args, agent=None, render=False
 
 
 @contextmanager
-def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False):
+def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False, use_lock=True):
     """
     Context manager to manage a set of training worker threads.
 
@@ -202,7 +216,8 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False)
 
     parent_conns, child_conns = [], []
     worker_processes = []
-    lock = mp.Lock()
+
+    lock = mp.Lock() if use_lock else None
 
     for i in range(n_workers):
         parent_conn, child_conn = mp.Pipe()
@@ -222,7 +237,7 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False)
     eval_process = mp.Process(
         target=worker_func,
         args=[0, child_conn, *worker_args],
-        kwargs={'eval_mode': True},
+        kwargs={'eval_mode': True, "agent": agent},
     )
     worker_processes.append(eval_process)
     eval_process.start()
@@ -239,11 +254,11 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False)
 class Worker:
 
     def __init__(self, task_id, agent_params, train_params, env_params,
-                 agent=None, eval_mode=False, render=False, lock=None):
+                 shared_agent, shared_opt=None, eval_mode=False, render=False, lock=None):
         self.eval_mode = eval_mode
-        self.shared_mode = agent is not None
+        # self.shared_mode = agent is not None
         self.task_id = task_id
-        self.lock = lock
+        self.lock = lock or NoOpContextManager()
         agent_params = dict(agent_params)
         env_params = dict(env_params)
         if eval_mode:
@@ -266,10 +281,14 @@ class Worker:
         if not eval_mode:
             self.state = None  # Force reset to match previous work
 
-        if not self.shared_mode:
-            self.agent = cor_rl.agents.factory(agent_params, train_params)
-        else:
-            self.agent = agent
+        # if not self.shared_mode:
+        #     self.agent = cor_rl.agents.factory(agent_params, train_params)
+        # else:
+        #     self.agent = agent
+        self.agent = cor_rl.agents.factory(agent_params, train_params)
+        self.shared_agent = shared_agent
+        self.shared_opt = shared_opt
+
         torch.manual_seed(self.task_seed)  # Reset seed to match previous work
 
     def handle_task(self, task):
@@ -281,9 +300,10 @@ class Worker:
                 self.state = None
 
             # Train the agent for a few steps
-            params = None if self.shared_mode else task['params']
+            # params = None if self.shared_mode else task['params']
             result = agent_env_task(
-                self.agent, self.env, params, self.state,
+                self.agent, self.shared_agent, self.shared_opt,
+                self.env, self.state,
                 t_max=task['max_steps'], lock=self.lock
             )
             # Update the state for next time
@@ -314,7 +334,8 @@ class Worker:
             with torch.no_grad():
                 for g_idx in range(n_games):
                     result = agent_env_task(
-                        self.agent, self.env, None, state=self.state,
+                        self.agent, self.shared_agent, self.shared_opt,
+                        self.env, None, state=self.state,
                         t_max=100000, eval_mode=True
                     )
                     self.state = None
@@ -354,7 +375,8 @@ def worker_thread_new(task_id, conn, agent_params, train_params, env_params,
 
     worker = Worker(
         task_id, agent_params, train_params, env_params,
-        agent=agent, eval_mode=eval_mode, render=render, lock=lock
+        shared_agent=agent, shared_opt=agent.optimizer,
+        eval_mode=eval_mode, render=render, lock=lock
     )
 
     while True:
@@ -398,7 +420,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         avg_decay=0.95, debug=False, out_dir=None,
                         eval_interval=None, accumulate_grads=False,
                         experiment_name=None, load_file=None, save_interval=None,
-                        use_mlflow=False, serial=False, shared_mode=True, render=False):
+                        use_mlflow=False, serial=False, shared_mode=True, render=False,
+                        use_lock=True):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
@@ -442,7 +465,9 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     # Seed and create the global agent
     if seed:
         torch.manual_seed(seed)
-    global_agent = cor_rl.agents.factory(agent_params, train_params)
+    g_agent_params = dict(agent_params)
+    g_agent_params["shared"] = True
+    global_agent = cor_rl.agents.factory(g_agent_params, train_params)
     if load_file:
         print(f"Loading agent from {load_file}!")
         global_agent.load(load_file)
@@ -451,9 +476,6 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     global_agent.zero_grad()
     if shared_mode:
         global_agent.share_memory()
-        pipe_agent = global_agent
-    else:
-        pipe_agent = None
 
     worker_args = [agent_params, train_params, env_params]
 
@@ -462,7 +484,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     else:
         context_func = piped_workers
 
-    with context_func(n_workers, worker_thread_new, worker_args, agent=pipe_agent, render=render) as msg_pipes:
+    use_lock = use_lock and (not serial)
+
+    with context_func(n_workers, worker_thread_new, worker_args,
+                      agent=global_agent, render=render, use_lock=use_lock) as msg_pipes:
         # Set seed to have same action selection in serial (debugging) mode
         if seed:
             torch.manual_seed(seed)

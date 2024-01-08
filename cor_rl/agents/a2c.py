@@ -1,4 +1,6 @@
 from collections import namedtuple
+import random
+import time
 
 import numpy as np
 import torch
@@ -67,6 +69,8 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         self.train_params = dict(train_params)
         self.optimizer_name = self.train_params.pop('optimizer', 'adam').lower()
+        if agent_params.get("shared", False):
+            self.optimizer_name += "_shared"
 
         self.norm_returns = self.agent_params.get('norm_returns', False)
         self.clip_grad_norm = self.agent_params.get('clip_grad_norm', 0.0)
@@ -167,22 +171,39 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         return loss
 
-    def set_parameters(self, state_dict):
-        tensor_state = {}
-        for key, val in state_dict.items():
-            tensor_state[key] = torch.tensor(val)
-        self.net.load_state_dict(tensor_state)
+    def set_parameters(self, state_dict, copy=False):
+        if copy:
+            tensor_state = {}
+            for key, val in state_dict.items():
+                tensor_state[key] = torch.tensor(val)
 
-    def get_parameters(self):
-        state_dict = self.net.state_dict()
-        for key, val in state_dict.items():
-            state_dict[key] = val.tolist()
+            self.net.load_state_dict(tensor_state)
+        else:
+            self.net.load_state_dict(state_dict)
+
+    def get_parameters(self, tolist=False):
+        if tolist:
+            state_dict = self.net.state_dict()
+            for key, val in state_dict.items():
+                state_dict[key] = val.tolist()
+        else:
+            return self.net.state_dict()
 
         return state_dict
 
     def set_grads(self, grads):
         for name, param in self.net.named_parameters():
             param.grad = grads[name]
+
+    def sync_grads(self, other_net):
+
+        for self_p, other_p in zip(self.net.parameters(), other_net.parameters()):
+            if other_p.grad is not None:
+                # Sleep for a random amount of time (up to 100ms) to break deadlocks
+                # time.sleep(np.random.exponential(scale=0.5))
+                time.sleep(random.random()/10.0)
+                return
+            other_p._grad = self_p.grad
 
     def accumulate_grads(self, grads):
         for name, param in self.net.named_parameters():
@@ -217,6 +238,17 @@ class AdvantageActorCriticAgent(BaseAgent):
         # print(norm_val)
 
         return grads, loss
+
+    def calc_loss_and_backprop(self, results: InteractionResult):
+        # Compute the loss
+        loss = self.calculate_loss(results)
+        loss.backward()
+
+        # if self.clip_grad_norm > 0:
+        norm_val = nn.utils.clip_grad_norm_(
+            self.net.parameters(), self.clip_grad_norm or 1e9
+        )
+        return loss, norm_val
 
     def calc_total_loss_and_backprop(self, loss_list):
         loss = 0.0

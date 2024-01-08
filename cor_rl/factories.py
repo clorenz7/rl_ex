@@ -2,6 +2,8 @@
 import torch
 from torch import nn
 
+from cor_rl.shared_optim import SharedAdam, SharedRMSprop
+
 
 class ActivationFactory:
     _MAP = {
@@ -51,6 +53,8 @@ class OptimizerFactory:
         "adamw": torch.optim.AdamW,
         "rmsprop": torch.optim.RMSprop,
         "SGD": torch.optim.SGD,
+        "adam_shared": SharedAdam,
+        "rmsprop_shared": SharedRMSprop,
     }
 
     def get(self, optimizer_name, optimizer_params=None, net=None, param_list=None):

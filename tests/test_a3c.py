@@ -40,9 +40,9 @@ def test_cart_pole_eval():
     }
     agent = a2c.AdvantageActorCriticAgent(agent_params, train_params)
 
-    result = a3c.agent_env_task(agent, env, parameters=None, state=None)
-    # Just make sure that we can evaluate the agent and get grads
-    assert 'grads' in result
+    result = a3c.agent_env_task(agent, agent, agent.optimizer, env, state=None)
+    # Just make sure that we can evaluate the agent and get state
+    assert 'state' in result
 
 
 def test_cart_pole_train_pt_rep():
@@ -65,7 +65,7 @@ def test_cart_pole_train_pt_rep():
         'type': 'a2c-ffw',
     }
     train_params = {
-        'optimizer': 'adamw',
+        'optimizer': 'adam',
         'lr': 3e-3,
         'weight_decay': 0.0,
     }
@@ -91,8 +91,9 @@ def test_cart_pole_train_pt_rep():
             1, agent_params, train_params, 'CartPole-v1',
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=10000000,
-            debug=False, serial=True, seed=543, shared_mode=False
+            steps_per_batch=10000,
+            debug=False, serial=True, seed=543,
+            shared_mode=True
         )
 
     assert solved
@@ -118,7 +119,7 @@ def test_cart_pole_train_batched():
         'type': 'a2c-ffw',
     }
     train_params = {
-        'optimizer': 'adamw',
+        'optimizer': 'adam',
         'lr': 1e-3,
         'weight_decay': 0.0,
     }
@@ -145,7 +146,8 @@ def test_cart_pole_train_batched():
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
             steps_per_batch=steps_per_batch, seed=seed,
-            debug=False, serial=True,  shared_mode=False
+            debug=False, serial=True,
+            shared_mode=True
         )
     assert solved
 
@@ -169,9 +171,9 @@ def test_cart_pole_train_arch():
         'type': 'a2c-ffw',
     }
     train_params = {
-        'optimizer': 'adamw',
+        'optimizer': 'adam',
         'lr': 1e-3 * 2,
-        'weight_decay': 1e-4,
+        # 'weight_decay': 1e-4,  # TODO This was not commented out before
     }
     global_agent = cor_rl.agents.factory(agent_params, train_params)
     torch.manual_seed(543)
@@ -193,7 +195,7 @@ def test_cart_pole_train_arch():
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
             steps_per_batch=1250,
-            debug=False, serial=True, seed=543, shared_mode=False
+            debug=False, serial=True, seed=543, shared_mode=True
         )
 
     assert solved
@@ -216,7 +218,7 @@ def test_cart_pole_train_multi():
         'value_loss_clip': 1.0,
     }
     train_params = {
-        'optimizer': 'adamw',
+        'optimizer': 'adam',
         'lr': 1e-3,
         'weight_decay': 0.0,
     }
@@ -254,7 +256,7 @@ def test_cart_pole_train_multi():
             solved_thresh=gym.make(env_name).spec.reward_threshold,
             steps_per_batch=steps_per_batch,
             debug=False, seed=seed,
-            serial=True, shared_mode=False
+            serial=True, shared_mode=True
         )
 
     assert solved
@@ -274,8 +276,9 @@ def test_cart_pole_train_a3c():
         'type': 'a2c-ffw',
     }
     train_params = {
-        'optimizer': 'adamw',
-        'lr': 4e-3,
+        'optimizer': 'adam',
+        # 'lr': 4e-3,
+        'lr': 8e-4,
         'weight_decay': 0.0,
     }
 
@@ -287,7 +290,7 @@ def test_cart_pole_train_a3c():
         n_workers, agent_params, train_params, env_name,
         log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
         solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
-        debug=False, use_mlflow=False
+        debug=False, use_mlflow=False, use_lock=True
     )
     assert solved
 
@@ -320,7 +323,7 @@ def test_cart_pole_train_a3c():
 #         'type': 'a2c-ffw',
 #     }
 #     train_params = {
-#         'optimizer': 'adamw',
+#         'optimizer': 'adam',
 #         'lr': 4e-3,
 #         'weight_decay': 0.0,
 #     }
