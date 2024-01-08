@@ -70,31 +70,15 @@ def test_cart_pole_train_pt_rep():
         'weight_decay': 0.0,
     }
 
-    old = False
-
-    if old:
-        print("Serial Code!")
-        global_agent = cor_rl.agents.factory(agent_params, train_params)
-        torch.manual_seed(543)
-        agents = [cor_rl.agents.factory(agent_params, train_params)]
-
-        agent, solved = a3c.train_loop(
-            global_agent, agents, [env],
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=env.spec.reward_threshold, seed=543
-        )
-
-    else:
-        print("")
-        print("Parallel Code!")
-        agent, solved = a3c.train_loop_parallel(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=10000,
-            debug=False, serial=True, seed=543,
-            shared_mode=True
-        )
+    print("")
+    agent, solved = a3c.train_loop_parallel(
+        1, agent_params, train_params, 'CartPole-v1',
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        steps_per_batch=10000,
+        debug=False, serial=True, seed=543,
+        shared_mode=True
+    )
 
     assert solved
 
@@ -123,32 +107,17 @@ def test_cart_pole_train_batched():
         'lr': 1e-3,
         'weight_decay': 0.0,
     }
-
-    global_agent = cor_rl.agents.factory(agent_params, train_params)
-    torch.manual_seed(seed)
-    agents = [cor_rl.agents.factory(agent_params, train_params)]
-
-    old = False
     steps_per_batch = 125
-    if old:
-        print("Serial Code!")
-        agent, solved = a3c.train_loop(
-            global_agent, agents, [env],
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=env.spec.reward_threshold,
-            steps_per_batch=steps_per_batch, seed=seed
-        )
-    else:
-        print("")
-        print("Parallel Code!")
-        agent, solved = a3c.train_loop_parallel(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=steps_per_batch, seed=seed,
-            debug=False, serial=True,
-            shared_mode=True
-        )
+
+    print("")
+    agent, solved = a3c.train_loop_parallel(
+        1, agent_params, train_params, 'CartPole-v1',
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        steps_per_batch=steps_per_batch, seed=seed,
+        debug=False, serial=True,
+        shared_mode=True
+    )
     assert solved
 
 
@@ -175,28 +144,14 @@ def test_cart_pole_train_arch():
         'lr': 1e-3 * 2,
         # 'weight_decay': 1e-4,  # TODO This was not commented out before
     }
-    global_agent = cor_rl.agents.factory(agent_params, train_params)
-    torch.manual_seed(543)
-    agents = [cor_rl.agents.factory(agent_params, train_params)]
-
-    old = False
-    if old:
-        agent, solved = a3c.train_loop(
-            global_agent, agents, [env],
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=env.spec.reward_threshold, steps_per_batch=1250,
-            seed=543
-        )
-    else:
-        print("")
-        print("Parallel Code!")
-        agent, solved = a3c.train_loop_parallel(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=1250,
-            debug=False, serial=True, seed=543, shared_mode=True
-        )
+    print("")
+    agent, solved = a3c.train_loop_parallel(
+        1, agent_params, train_params, 'CartPole-v1',
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        steps_per_batch=1250,
+        debug=False, serial=True, seed=543, shared_mode=True
+    )
 
     assert solved
 
@@ -223,41 +178,20 @@ def test_cart_pole_train_multi():
         'weight_decay': 0.0,
     }
 
-    agents, envs = [], []
     n_threads = 16
     env_name = 'CartPole-v1'
 
-    old = False
     steps_per_batch = 15 * 10
 
-    if old:
-        global_agent = a3c.AdvantageActorCriticAgent(agent_params, train_params)
-        for ii in range(n_threads):
-            t_seed = seed + 10 * ii
-            torch.manual_seed(t_seed)
-            agents.append(
-                a3c.AdvantageActorCriticAgent(agent_params, train_params),
-            )
-            envs.append(gym.make(env_name))
-            envs[-1].reset(seed=t_seed)
-
-        agent, solved = a3c.train_loop(
-            global_agent, agents, envs,
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=envs[0].spec.reward_threshold,
-            steps_per_batch=steps_per_batch, seed=seed,
-            debug=False
-        )
-    else:
-        print("")
-        agent, solved = a3c.train_loop_parallel(
-            n_threads, agent_params, train_params, env_name,
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make(env_name).spec.reward_threshold,
-            steps_per_batch=steps_per_batch,
-            debug=False, seed=seed,
-            serial=True, shared_mode=True
-        )
+    print("")
+    agent, solved = a3c.train_loop_parallel(
+        n_threads, agent_params, train_params, env_name,
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+        solved_thresh=gym.make(env_name).spec.reward_threshold,
+        steps_per_batch=steps_per_batch,
+        debug=False, seed=seed,
+        serial=True, shared_mode=True
+    )
 
     assert solved
 
