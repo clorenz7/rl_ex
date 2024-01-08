@@ -607,12 +607,17 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                     print(
                         f"Epoch {eval_steps / 4e6:0.3f}\t"
                         f"Average score: {result['avg_score']:0.1f}\t"
-                        f"Std score: {result['std_score']:0.1f}  \t"
+                        f"Std score: {result['std_score']:0.1f} \t"
+                        f"Max score: {max(result['scores']):0.1f}  \t"
                         f"Time: {last_eval_epoch:0.1f}min"
                     )
                     if use_mlflow:
                         mlflow.log_metric(
                             'avg_score', result['avg_score'],
+                            step=eval_steps, synchronous=False
+                        )
+                        mlflow.log_metric(
+                            'max_score', max(result['score']),
                             step=eval_steps, synchronous=False
                         )
                     eval_in_flight = False
