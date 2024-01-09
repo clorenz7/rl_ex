@@ -1,7 +1,7 @@
 from contextlib import contextmanager
+from contextlib import nullcontext
 import datetime
 import math
-# import multiprocessing as mp
 import torch.multiprocessing as mp
 import os
 import select
@@ -19,22 +19,6 @@ from cor_rl.agents.a2c import (
 
 MLFLOW_URI = "http://127.0.0.1:8888"
 mlflow.set_tracking_uri(uri=MLFLOW_URI)
-
-
-@contextmanager
-def no_op_context():
-    # This function does nothing before yielding
-    yield
-
-
-class NoOpContextManager:
-    def __enter__(self):
-        # No setup or actions to perform
-        pass
-
-    def __exit__(self, exc_type, exc_value, traceback):
-        # No teardown or actions to perform
-        pass
 
 
 def interact(env, agent, t_max=5, state=None, output_frames=False,
@@ -108,9 +92,7 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
 
 def agent_env_task(agent: AdvantageActorCriticAgent, shared_agent: AdvantageActorCriticAgent,
                    shared_opt, env, state, t_max=5,
-                   output_frames=False, eval_mode=False, lock=None):
-
-    lock = lock or NoOpContextManager()
+                   output_frames=False, eval_mode=False, lock=nullcontext()):
     # lock = NoOpContextManager()
 
     # if parameters is not None:
@@ -258,7 +240,8 @@ class Worker:
         self.eval_mode = eval_mode
         # self.shared_mode = agent is not None
         self.task_id = task_id
-        self.lock = lock or NoOpContextManager()
+        self.lock = lock or nullcontext()
+        self.epoch_steps = 4e6
         agent_params = dict(agent_params)
         env_params = dict(env_params)
         if eval_mode:
@@ -389,9 +372,9 @@ class Worker:
 
         if self.use_mlflow:
             mlflow.set_experiment(worker_params['experiment_name'])
+            mlflow.start_run(self.mlflow_run_id, nested=True)
             if self.task_id == 0:
                 mlflow.log_params(self.agent.params())
-            mlflow.start_run(self.mlflow_run_id)
 
         self.start_time = time.time()
 
@@ -404,7 +387,9 @@ class Worker:
         avg_score = shared_info['avg_score'].item()
         if (episode_num % self.print_interval) == 0:
             elap_time = (time.time() - self.start_time) / 60.0
+            epoch = shared_info['total_steps'].item() / self.epoch_steps
             print(
+                f"Epoch: {epoch:0.2f}\t"
                 f"Episode {episode_num:.0f}\t"
                 f"Score: {avg_score:0.2f}\t"
                 f"Time: {elap_time:0.2f}min\t"
@@ -416,11 +401,11 @@ class Worker:
                     'running_avg_loss': shared_info['avg_loss'].item(),
                     'ep_avg_loss': self.metrics['ep_loss'] / self.metrics['ep_steps'],
                     'ep_avg_grad_norm': self.metrics['ep_grad_norm'] / self.metrics['ep_batches'],
-                    'ep_max_loss': self.metric['max_loss'],
-                    'ep_max_grad_norm': self.metric['max_grad_norm']
+                    'ep_max_loss': self.metrics['max_loss'],
+                    'ep_max_grad_norm': self.metrics['max_grad_norm']
                 }
                 mlflow.log_metrics(
-                    metrics, step=episode_num, synchronous=False
+                    metrics, step=int(episode_num), synchronous=False
                 )
 
     def continuously_train(self, shared_info, worker_params={}):
@@ -459,9 +444,10 @@ class Worker:
             loss, norm_val = self.agent.calc_loss_and_backprop(results)
             # with lock:
             if shared_info['solved'].item() == 0:
-                self.shared_opt.zero_grad(set_to_none=True)
-                self.agent.sync_grads(self.shared_agent)
-                self.shared_opt.step()
+                with self.lock:
+                    self.shared_opt.zero_grad(set_to_none=True)
+                    self.agent.sync_grads(self.shared_agent)
+                    self.shared_opt.step()
             else:
                 break
             # end with lock
@@ -804,11 +790,11 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
 
 
 def continuous_worker_thread(task_id, agent_params, train_params, env_params,
-                             shared_agent, shared_info, worker_params):
+                             shared_agent, shared_info, worker_params, lock=None):
     worker = Worker(
         task_id, agent_params, train_params, env_params,
         shared_agent=shared_agent, shared_opt=shared_agent.optimizer,
-        eval_mode=False, render=False, lock=None
+        eval_mode=False, render=False, lock=lock
     )
 
     worker.continuously_train(shared_info, worker_params)
@@ -850,6 +836,8 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
     # if use_mlflow:
     #     mlflow.log_params(global_agent.params())
 
+    lock = mp.Lock() if use_lock else None
+
     info_fields = [
         'total_steps', 'total_episodes', 'avg_score', 'avg_loss', 'solved',
     ]
@@ -874,7 +862,8 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         'max_steps_per_episode': max_steps_per_episode,
         'max_steps': total_step_limit,
         'max_episodes': episode_limit,
-        'metric_decay': avg_decay
+        'metric_decay': avg_decay,
+        'print_interval': log_interval,
     }
 
     worker_args = [
@@ -887,7 +876,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         worker_process = mp.Process(
             target=continuous_worker_thread,
             args=[i, *worker_args],
-            kwargs={},
+            kwargs={'lock': lock},
         )
         worker_process.start()
         processes.append(worker_process)
