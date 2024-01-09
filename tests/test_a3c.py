@@ -61,23 +61,24 @@ def test_cart_pole_train_pt_rep():
         'n_state': 4,
         'gamma': 0.99,
         'entropy_weight': 0.00,
-        'value_loss_clip': 2.0,
+        'value_loss_clip': 1.0,
         'type': 'a2c-ffw',
+        'norm_returns': True,
     }
     train_params = {
         'optimizer': 'adam',
-        'lr': 3e-3,
+        'lr': 3e-2,
         'weight_decay': 0.0,
     }
 
     print("")
     agent, solved = a3c.train_loop_parallel(
         1, agent_params, train_params, 'CartPole-v1',
-        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+        total_step_limit=1e9, episode_limit=2000, log_interval=10,
         solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
         steps_per_batch=10000,
         debug=False, serial=True, seed=543,
-        shared_mode=True
+        shared_mode=True, repro_mode=True
     )
 
     assert solved

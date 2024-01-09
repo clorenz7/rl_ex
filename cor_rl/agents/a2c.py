@@ -130,6 +130,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         )
         n_steps = len(n_step_returns)
         n_step_returns = torch.tensor(n_step_returns).to(self.device)
+        orig_returns = n_step_returns
 
         value_est = torch.hstack(results.values[:-1])
 

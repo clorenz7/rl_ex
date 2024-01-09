@@ -124,7 +124,6 @@ def agent_env_task(agent: AdvantageActorCriticAgent, shared_agent: AdvantageActo
         break_on_lost_life=not eval_mode,
         lock=None,  # Do not typically lock on forward pass
     )
-
     metrics = {}
     # # This will run back prop
     # if parameters is None:
@@ -197,8 +196,9 @@ def serial_workers(n_workers, worker_func, worker_args, agent=None, render=False
     mock_pipes = [PipeMock(worker) for worker in workers]
 
     # Add the evaluation worker
-    workers.append(Worker(n_workers-1, *worker_args, shared_agent=agent, eval_mode=True))
-    mock_pipes.append(PipeMock(workers[-1]))
+    if not kwargs.get('repro_mode', False):
+        workers.append(Worker(0, *worker_args, shared_agent=agent, eval_mode=True))
+        mock_pipes.append(PipeMock(workers[-1]))
 
     try:
         yield mock_pipes
@@ -207,7 +207,7 @@ def serial_workers(n_workers, worker_func, worker_args, agent=None, render=False
 
 
 @contextmanager
-def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False, use_lock=True):
+def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False, use_lock=True, **kwargs):
     """
     Context manager to manage a set of training worker threads.
 
@@ -289,7 +289,8 @@ class Worker:
         self.shared_agent = shared_agent
         self.shared_opt = shared_opt
 
-        torch.manual_seed(self.task_seed)  # Reset seed to match previous work
+        # Turning off to match Cart Pole Reference
+        # torch.manual_seed(self.task_seed)  # Reset seed to match previous work
 
     def handle_task(self, task):
         task_type = task.get('type', '')
@@ -421,7 +422,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                         eval_interval=None, accumulate_grads=False,
                         experiment_name=None, load_file=None, save_interval=None,
                         use_mlflow=False, serial=False, shared_mode=True, render=False,
-                        use_lock=True):
+                        use_lock=True, repro_mode=False):
     """
     Training loop which sets up multiple worker threads which compute
     gradients in parallel.
@@ -454,6 +455,9 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     metric_step_rate = 500
     last_flow_log = -metric_step_rate
 
+    if repro_mode:
+        avg_reward = 10
+
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
@@ -466,7 +470,8 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     if seed:
         torch.manual_seed(seed)
     g_agent_params = dict(agent_params)
-    g_agent_params["shared"] = True
+    if shared_mode:
+        g_agent_params["shared"] = True
     global_agent = cor_rl.agents.factory(g_agent_params, train_params)
     if load_file:
         print(f"Loading agent from {load_file}!")
@@ -487,9 +492,10 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     use_lock = use_lock and (not serial)
 
     with context_func(n_workers, worker_thread_new, worker_args,
-                      agent=global_agent, render=render, use_lock=use_lock) as msg_pipes:
+                      agent=global_agent, render=render, use_lock=use_lock,
+                      repro_mode=repro_mode) as msg_pipes:
         # Set seed to have same action selection in serial (debugging) mode
-        if seed:
+        if seed and not repro_mode:
             torch.manual_seed(seed)
         start_time = time.time()
         while keep_training:
@@ -583,13 +589,21 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
                     if (total_episodes % log_interval) == 0:
 
                         elap = (time.time() - start_time) / 60
-                        print(
-                            f'Episode {total_episodes}\t'
-                            f'Steps: {total_steps}\t'
-                            f'Average reward: {avg_reward:.2f}\t'
-                            f'Max reward: {win_max_reward:.2f}\t'
-                            f'Time: {elap:0.1f}min'
-                        )
+                        if repro_mode:
+                            print(
+                                f'Episode {total_episodes}\t'
+                                f'Last reward: {last_reward:.2f}\t'
+                                f'Average reward: {avg_reward:.2f}\t'
+                                f'Time: {elap:0.1f}min'
+                            )
+                        else:
+                            print(
+                                f'Episode {total_episodes}\t'
+                                f'Steps: {total_steps}\t'
+                                f'Average reward: {avg_reward:.2f}\t'
+                                f'Max reward: {win_max_reward:.2f}\t'
+                                f'Time: {elap:0.1f}min'
+                            )
                         win_max_reward = 0
                 if solved:
                     break
