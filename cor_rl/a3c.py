@@ -790,15 +790,18 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
 
 
 def continuous_worker_thread(task_id, agent_params, train_params, env_params,
-                             shared_agent, shared_info, worker_params, lock=None):
-    worker = Worker(
-        task_id, agent_params, train_params, env_params,
-        shared_agent=shared_agent, shared_opt=shared_agent.optimizer,
-        eval_mode=False, render=False, lock=lock
-    )
+                             shared_agent, shared_info, worker_params, lock=None,
+                             worker=None):
+    if worker is None:
+        worker = Worker(
+            task_id, agent_params, train_params, env_params,
+            shared_agent=shared_agent, shared_opt=shared_agent.optimizer,
+            eval_mode=False, render=False, lock=lock
+        )
 
     worker.continuously_train(shared_info, worker_params)
 
+    return worker
 
 def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                           steps_per_batch=5, total_step_limit=10000,
@@ -871,18 +874,42 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         global_agent, shared_info, worker_params
     ]
 
-    processes = []
-    for i in range(n_workers):
-        worker_process = mp.Process(
-            target=continuous_worker_thread,
-            args=[i, *worker_args],
-            kwargs={'lock': lock},
-        )
-        worker_process.start()
-        processes.append(worker_process)
+    if serial:
+        if n_workers == 1:
+            continuous_worker_thread(0, *worker_args, lock=None)
+        else:
+            worker_params['max_steps'] = steps_per_batch
+            worker_params['mlflow_run_id'] = None
+            # Initialize the workers
+            workers = []
+            for i in range(n_workers):
+                worker = continuous_worker_thread(i, *worker_args, lock=None)
+                workers.append(worker)
 
-    for p in processes:
-        p.join()
+            keep_training = True
+            while keep_training:
+                for i in range(n_workers):
+                    continuous_worker_thread(
+                        i, *worker_args, lock=None, worker=workers[i]
+                    )
+                keep_training = (
+                    shared_info['solved'] == 0 and
+                    shared_info['total_steps'] < total_step_limit and
+                    shared_info['total_episodes'] < episode_limit
+                )
+    else:
+        processes = []
+        for i in range(n_workers):
+            worker_process = mp.Process(
+                target=continuous_worker_thread,
+                args=[i, *worker_args],
+                kwargs={'lock': lock},
+            )
+            worker_process.start()
+            processes.append(worker_process)
+
+        for p in processes:
+            p.join()
 
     if use_mlflow:
         mlflow.end_run()
