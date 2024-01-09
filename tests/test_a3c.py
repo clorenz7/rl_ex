@@ -50,10 +50,6 @@ def test_cart_pole_train_pt_rep():
     Test that cart pole can be solved similar to PyTorch reference
     implementation of A2C
     """
-    render_mode = "human" if False else 'rgb_array'
-    env = gym.make('CartPole-v1', render_mode=render_mode)
-    env.reset(seed=543)
-    torch.manual_seed(543)
 
     agent_params = {
         'hidden_sizes': [128],
@@ -67,7 +63,7 @@ def test_cart_pole_train_pt_rep():
     }
     train_params = {
         'optimizer': 'adam',
-        'lr': 3e-2,
+        'lr': 3e-2,  # A learning rate of 3e-3 is more stable...
         'weight_decay': 0.0,
     }
 
