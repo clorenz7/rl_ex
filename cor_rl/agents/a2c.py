@@ -76,6 +76,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.clip_grad_norm = self.agent_params.get('clip_grad_norm', 0.0)
         self.n_exp_steps = self.agent_params.get('n_exp_steps', None)
         self.max_entropy = np.log2(self.n_actions)
+        self.value_loss_factor = self.agent_params.get('value_loss_factor', 1.0)
 
         self.reset()
 
@@ -130,7 +131,6 @@ class AdvantageActorCriticAgent(BaseAgent):
         )
         n_steps = len(n_step_returns)
         n_step_returns = torch.tensor(n_step_returns).to(self.device)
-        orig_returns = n_step_returns
 
         value_est = torch.hstack(results.values[:-1])
 
@@ -153,22 +153,19 @@ class AdvantageActorCriticAgent(BaseAgent):
         advantage = n_step_returns - value_est.detach()
         policy_loss = -torch.hstack(results.log_probs) * advantage
 
-        loss = value_loss.sum() + policy_loss.sum()
+        loss = self.value_loss_factor * value_loss.sum() + policy_loss.sum()
         # loss = value_loss.mean() + policy_loss.mean()
+
+        if self.n_exp_steps:
+            loss = loss * (self.n_exp_steps / n_steps)
 
         if self.entropy_weight > 0:
             entropy_loss = torch.hstack(results.entropies)
             loss = loss - entropy_loss.sum() * self.entropy_weight
             # loss = loss - entropy_loss.mean() * self.entropy_weight
 
-        if self.n_exp_steps:
-            loss = loss * (self.n_exp_steps / n_steps)
-
-        # Add max entropy in order to keep it positive
-        loss = loss + self.max_entropy
-
-        # if loss > 25:
-        #     import ipdb; ipdb.set_trace()
+        # # Add max entropy in order to keep it positive
+        # loss = loss + self.max_entropy
 
         return loss
 

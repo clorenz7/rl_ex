@@ -62,7 +62,7 @@ def test_space_invaders_a3c():
         'clip_grad_norm': 50.0,
         'type': 'a2c-atari',
         'reward_clip': 1.0,
-        'n_exp_steps': 5.0,
+        # 'n_exp_steps': 5.0,
     }
     train_params = {
         'optimizer': 'rmsprop',

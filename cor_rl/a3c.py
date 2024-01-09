@@ -452,7 +452,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
     solved = False
     episode_limit = episode_limit or 1e9
     keep_training = True
-    metric_step_rate = 500
+    metric_step_rate = 2000
     last_flow_log = -metric_step_rate
 
     if repro_mode:
