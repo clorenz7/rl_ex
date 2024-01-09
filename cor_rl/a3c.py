@@ -370,6 +370,151 @@ class Worker:
         else:
             return "NO TYPE"
 
+    def reset_metrics(self):
+        self.metrics = dict(
+            ep_score=0,
+            ep_loss=0,
+            ep_grad_norm=0.0,
+            max_loss=float('-inf'),
+            max_grad_norm=float('-inf'),
+            ep_steps=0,
+            ep_batches=0
+        )
+
+    def setup_logging(self, worker_params):
+        self.mlflow_run_id = worker_params.get('mlflow_run_id')
+        self.use_mlflow = self.mlflow_run_id is not None
+        self.metric_log_interval = worker_params.get('metric_log_interval', 2)
+        self.print_interval = worker_params.get('print_interval', 10)
+
+        if self.use_mlflow:
+            mlflow.set_experiment(worker_params['experiment_name'])
+            if self.task_id == 0:
+                mlflow.log_params(self.agent.params())
+            mlflow.start_run(self.mlflow_run_id)
+
+        self.start_time = time.time()
+
+    def teardown_logging(self):
+        # if self.use_mlflow:
+        #     mlflow.end_run()
+        pass
+
+    def log_metrics(self, episode_num, shared_info):
+        avg_score = shared_info['avg_score'].item()
+        if (episode_num % self.print_interval) == 0:
+            elap_time = (time.time() - self.start_time) / 60.0
+            print(
+                f"Episode {episode_num:.0f}\t"
+                f"Score: {avg_score:0.2f}\t"
+                f"Time: {elap_time:0.2f}min\t"
+            )
+        if episode_num % self.metric_log_interval == 0:
+            if self.use_mlflow:
+                metrics = {
+                    'running_avg_score': avg_score,
+                    'running_avg_loss': shared_info['avg_loss'].item(),
+                    'ep_avg_loss': self.metrics['ep_loss'] / self.metrics['ep_steps'],
+                    'ep_avg_grad_norm': self.metrics['ep_grad_norm'] / self.metrics['ep_batches'],
+                    'ep_max_loss': self.metric['max_loss'],
+                    'ep_max_grad_norm': self.metric['max_grad_norm']
+                }
+                mlflow.log_metrics(
+                    metrics, step=episode_num, synchronous=False
+                )
+
+    def continuously_train(self, shared_info, worker_params={}):
+        """
+            shared_info:
+                total_steps
+                total_episodes
+                avg_score
+                avg_loss
+        """
+        keep_training = True
+        solved = False
+
+        self.reset_metrics()
+
+        metric_decay = worker_params.get('metric_decay', 0.95)
+        solved_thresh = worker_params.get('solved_thresh') or float('inf')
+
+        max_steps_per_batch = worker_params.get('max_steps_per_batch', 5)
+        max_steps = worker_params.get('max_steps') or 200e6
+        max_episodes = worker_params.get('max_episodes') or 1e9
+        # Setup logging (mlflow experiment, etc)
+        self.setup_logging(worker_params)
+
+        while keep_training:
+            self.agent.set_parameters(self.shared_agent.get_parameters())
+
+            self.agent.zero_grad(set_to_none=True)
+
+            results, state, terminated, frames = interact(
+                self.env, self.agent, t_max=max_steps_per_batch,
+                state=self.state, output_frames=False,
+                break_on_lost_life=True,
+            )
+            self.state = state
+            loss, norm_val = self.agent.calc_loss_and_backprop(results)
+            # with lock:
+            if shared_info['solved'].item() == 0:
+                self.shared_opt.zero_grad(set_to_none=True)
+                self.agent.sync_grads(self.shared_agent)
+                self.shared_opt.step()
+            else:
+                break
+            # end with lock
+
+            n_steps = len(results.rewards)
+            self.metrics['ep_score'] += sum(results.rewards)
+            self.metrics['ep_loss'] += loss.item()
+            self.metrics['ep_grad_norm'] += norm_val.item()
+            self.metrics['max_loss'] = max(self.metrics['max_loss'], loss.item())
+            self.metrics['max_grad_norm'] = max(
+                self.metrics['max_grad_norm'], norm_val.item()
+            )
+            shared_info['total_steps'] += n_steps
+            self.metrics['ep_batches'] += 1
+            self.metrics['ep_steps'] += n_steps
+            if self.metrics['ep_steps'] >= self.max_steps_per_episode:
+                self.state = None
+                terminated = True
+
+            if terminated:
+                total_eps = shared_info['total_episodes'].item()
+                shared_info['total_episodes'] += 1
+
+                factor = 1 if total_eps == 0 else 1 - metric_decay
+                shared_info['avg_score'].mul_(1-factor).add_(
+                    factor * self.metrics['ep_score']
+                )
+                loss_per_step = self.metrics['ep_loss'] / self.metrics['ep_steps']
+                shared_info['avg_loss'].mul_(1-factor).add_(factor * loss_per_step)
+
+                self.log_metrics(total_eps+1, shared_info)
+                solved = shared_info['avg_score'] >= solved_thresh
+                if solved:
+                    shared_info['solved'] += 1.0
+                    elap_time = (time.time() - self.start_time) / 60.0
+                    print(
+                        f"SOLVED!\nEpisode {shared_info['total_episodes'].item():.0f}\t"
+                        f"Avg Score: {shared_info['avg_score'].item():.2f}\t"
+                        f"Last score: {self.metrics['ep_score']:.1f}\t"
+                        f"Time: {elap_time:0.2f}min"
+                    )
+                    break
+                self.reset_metrics()
+
+            solved = solved or shared_info['solved'].item() > 0
+            keep_training = (
+                (not solved) and
+                shared_info['total_episodes'] < max_episodes and
+                shared_info['total_steps'] < max_steps
+            )
+
+        self.teardown_logging()
+
 
 def worker_thread_new(task_id, conn, agent_params, train_params, env_params,
                       agent=None, eval_mode=False, render=False, lock=None):
@@ -656,3 +801,103 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
         print(f"Aborted after {time.time() - start_time:0.1f}sec")
 
     return global_agent, solved
+
+
+def continuous_worker_thread(task_id, agent_params, train_params, env_params,
+                             shared_agent, shared_info, worker_params):
+    worker = Worker(
+        task_id, agent_params, train_params, env_params,
+        shared_agent=shared_agent, shared_opt=shared_agent.optimizer,
+        eval_mode=False, render=False, lock=None
+    )
+
+    worker.continuously_train(shared_info, worker_params)
+
+
+def train_loop_continuous(n_workers, agent_params, train_params, env_params,
+                          steps_per_batch=5, total_step_limit=10000,
+                          episode_limit=None, max_steps_per_episode=10000,
+                          solved_thresh=None, log_interval=1e9, seed=8888,
+                          avg_decay=0.95, debug=False, out_dir=None,
+                          eval_interval=None, accumulate_grads=False,
+                          experiment_name=None, load_file=None, save_interval=None,
+                          use_mlflow=False, serial=False, shared_mode=True, render=False,
+                          use_lock=True, repro_mode=False):
+
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    if isinstance(env_params, str):
+        env_params = {'env_name': env_params}
+    env_params['seed'] = seed
+    env_params['max_steps_per_episode'] = max_steps_per_episode
+
+    # Seed and create the global agent
+    if seed:
+        torch.manual_seed(seed)
+    g_agent_params = dict(agent_params)
+    if shared_mode:
+        g_agent_params["shared"] = True
+    global_agent = cor_rl.agents.factory(g_agent_params, train_params)
+    if load_file:
+        print(f"Loading agent from {load_file}!")
+        global_agent.load(load_file)
+    global_agent.zero_grad()
+    if shared_mode:
+        global_agent.share_memory()
+
+    # TODO: Move this to worker
+    # if use_mlflow:
+    #     mlflow.log_params(global_agent.params())
+
+    info_fields = [
+        'total_steps', 'total_episodes', 'avg_score', 'avg_loss', 'solved',
+    ]
+    shared_info = {
+        k: torch.DoubleTensor([0]).share_memory_() for k in info_fields
+    }
+    if repro_mode:
+        shared_info['avg_score'] += 10.0
+
+    experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
+    mlflow_run_id = None
+    if use_mlflow:
+        mlflow.set_experiment(experiment_name)
+        active_run = mlflow.start_run()
+        mlflow_run_id = active_run.info.run_id
+
+    worker_params = {
+        'experiment_name': experiment_name,
+        'mlflow_run_id': mlflow_run_id,
+        'solved_thresh': solved_thresh,
+        'max_steps_per_batch': steps_per_batch,
+        'max_steps_per_episode': max_steps_per_episode,
+        'max_steps': total_step_limit,
+        'max_episodes': episode_limit,
+        'metric_decay': avg_decay
+    }
+
+    worker_args = [
+        agent_params, train_params, env_params,
+        global_agent, shared_info, worker_params
+    ]
+
+    processes = []
+    for i in range(n_workers):
+        worker_process = mp.Process(
+            target=continuous_worker_thread,
+            args=[i, *worker_args],
+            kwargs={},
+        )
+        worker_process.start()
+        processes.append(worker_process)
+
+    for p in processes:
+        p.join()
+
+    if use_mlflow:
+        mlflow.end_run()
+
+    solved = shared_info['solved'].item() > 0
+    return global_agent, solved
+

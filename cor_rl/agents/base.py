@@ -14,7 +14,7 @@ class BaseAgent(nn.Module):
         self.n_actions = agent_params.get('n_actions')
         self.n_state = agent_params.get('n_state')
         self.value_loss_clip = self.agent_params.get('value_loss_clip', 0.0) or 0.0
-        self.reward_clip = self.agent_params.get('reward_clip')
+        self.reward_clip = self.agent_params.get('reward_clip') or 1e9
         self.entropy_weight = self.agent_params.get('entropy_weight', 0.01)
         if self.min_vals and self.max_vals:
             self.mu = (

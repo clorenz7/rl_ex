@@ -46,7 +46,8 @@ class SharedAdam(optim.Adam):
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:
-                    return  # was continue in original code
+                    # return  # was continue in original code
+                    continue
 
                 grad = p.grad.data
                 state = self.state[p]

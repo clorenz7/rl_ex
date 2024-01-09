@@ -21,7 +21,7 @@ InteractionResult = namedtuple(
 EPS = np.finfo(np.float32).eps.item()
 
 
-def calc_n_step_returns(rewards, last_value_est, gamma, reward_clip=None):
+def calc_n_step_returns(rewards, last_value_est, gamma, reward_clip=1e9):
 
     n_steps = len(rewards)
     n_step_returns = [0] * n_steps
@@ -29,8 +29,7 @@ def calc_n_step_returns(rewards, last_value_est, gamma, reward_clip=None):
     for step_idx in reversed(range(n_steps)):
         reward = rewards[step_idx]
         # Mnih paper clipped rewards to +-1 to account for different game scales
-        if reward_clip is not None:
-            reward = max(min(reward, reward_clip), -reward_clip)
+        reward = max(min(reward, reward_clip), -reward_clip)
         last_return = reward + gamma * last_return
         n_step_returns[step_idx] = last_return
 
@@ -196,12 +195,14 @@ class AdvantageActorCriticAgent(BaseAgent):
     def sync_grads(self, other_net):
 
         for self_p, other_p in zip(self.net.parameters(), other_net.parameters()):
-            if other_p.grad is not None:
-                # Sleep for a random amount of time (up to 100ms) to break deadlocks
-                # time.sleep(np.random.exponential(scale=0.5))
-                time.sleep(random.random()/10.0)
-                return
-            other_p._grad = self_p.grad
+            # if other_p.grad is not None:
+            #     # Sleep for a random amount of time (up to 100ms) to break deadlocks
+            #     # time.sleep(np.random.exponential(scale=0.5))
+            #     time.sleep(random.random()/10.0)
+            #     return
+            # other_p._grad = self_p.grad
+            if other_p.grad is None:
+                other_p._grad = self_p.grad
 
     def accumulate_grads(self, grads):
         for name, param in self.net.named_parameters():
@@ -282,5 +283,5 @@ class AdvantageActorCriticAgent(BaseAgent):
         return metrics
 
 
-    def zero_grad(self):
-        self.optimizer.zero_grad()
+    def zero_grad(self, set_to_none=False):
+        self.optimizer.zero_grad(set_to_none=set_to_none)

@@ -77,6 +77,22 @@ def test_cart_pole_train_pt_rep():
         shared_mode=True, repro_mode=True
     )
 
+    # train_params['lr'] = 1e-3
+    # n_failed = 0
+    # for i in range(33):
+    #     print("")
+    #     agent, solved = a3c.train_loop_continuous(
+    #         4, agent_params, train_params, 'CartPole-v1',
+    #         total_step_limit=1e9, episode_limit=2000, log_interval=10,
+    #         solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+    #         steps_per_batch=10000,
+    #         debug=False, serial=True, seed=543,
+    #         shared_mode=True, repro_mode=True
+    #     )
+    #     if not solved:
+    #         n_failed += 1
+    # print(f'# of failures: {n_failed}')
+
     assert solved
 
 
