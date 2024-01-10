@@ -96,6 +96,56 @@ def test_cart_pole_train_pt_rep():
     assert solved
 
 
+def test_cart_pole_train_pt_rep_rmsprop():
+    """
+    Test that cart pole can be solved similar to PyTorch reference
+    implementation of A2C
+    """
+
+    agent_params = {
+        'hidden_sizes': [128],
+        'n_actions': 2,
+        'n_state': 4,
+        'gamma': 0.99,
+        'entropy_weight': 0.00,
+        'value_loss_clip': 1.0,
+        'type': 'a2c-ffw',
+        'norm_returns': True,
+    }
+    train_params = {
+        'optimizer': 'rmsprop',
+        'lr': 1e-3,  # A learning rate of 3e-3 is more stable...
+        'weight_decay': 0.0,
+    }
+
+    # print("")
+    # agent, solved = a3c.train_loop_parallel(
+    #     1, agent_params, train_params, 'CartPole-v1',
+    #     total_step_limit=1e9, episode_limit=2000, log_interval=10,
+    #     solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+    #     steps_per_batch=10000,
+    #     debug=False, serial=True, seed=543,
+    #     shared_mode=True, repro_mode=True
+    # )
+
+    n_failed = 0
+    for i in range(33):
+        print("")
+        agent, solved = a3c.train_loop_continuous(
+            4, agent_params, train_params, 'CartPole-v1',
+            total_step_limit=1e9, episode_limit=2000, log_interval=10,
+            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+            steps_per_batch=10000,
+            debug=False, serial=False, seed=543,
+            shared_mode=True, repro_mode=True, use_lock=True
+        )
+        if not solved:
+            n_failed += 1
+    print(f'# of failures: {n_failed}')
+
+    assert solved
+
+
 def test_cart_pole_train_batched():
     """
     Test that cart pole can be solved with small batches of experience
