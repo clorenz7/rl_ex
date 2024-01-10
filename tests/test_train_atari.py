@@ -137,7 +137,7 @@ def test_space_invaders_adam():
     agent, solved = a3c.train_loop_continuous(
         n_workers, agent_params, train_params, env_params,
         log_interval=200, seed=8888101888,
-        total_step_limit=5e9,
+        total_step_limit=50e6,
         steps_per_batch=5, avg_decay=0.95,
         out_dir=os.path.join(DEFAULT_DIR, "a3c_test"),
         eval_interval=0.25, save_interval=2, use_mlflow=True,

@@ -118,16 +118,6 @@ def test_cart_pole_train_pt_rep_rmsprop():
         'weight_decay': 0.0,
     }
 
-    # print("")
-    # agent, solved = a3c.train_loop_parallel(
-    #     1, agent_params, train_params, 'CartPole-v1',
-    #     total_step_limit=1e9, episode_limit=2000, log_interval=10,
-    #     solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-    #     steps_per_batch=10000,
-    #     debug=False, serial=True, seed=543,
-    #     shared_mode=True, repro_mode=True
-    # )
-
     n_failed = 0
     for i in range(33):
         print("")

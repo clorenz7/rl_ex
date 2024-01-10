@@ -16,6 +16,7 @@ from cor_rl.agents.a2c import (
     InteractionResult,
     AdvantageActorCriticAgent
 )
+from cor_rl.utils import DEFAULT_DIR
 
 MLFLOW_URI = "http://127.0.0.1:8888"
 mlflow.set_tracking_uri(uri=MLFLOW_URI)
@@ -236,12 +237,13 @@ def piped_workers(n_workers, worker_func, worker_args, agent=None, render=False,
 class Worker:
 
     def __init__(self, task_id, agent_params, train_params, env_params,
-                 shared_agent, shared_opt=None, eval_mode=False, render=False, lock=None):
+                 shared_agent, shared_opt=None, eval_mode=False, render=False,
+                 lock=None, steps_per_epoch=1e6):
         self.eval_mode = eval_mode
         # self.shared_mode = agent is not None
         self.task_id = task_id
         self.lock = lock or nullcontext()
-        self.epoch_steps = 4e6
+        self.steps_per_epoch = steps_per_epoch
         agent_params = dict(agent_params)
         env_params = dict(env_params)
         if eval_mode:
@@ -353,6 +355,38 @@ class Worker:
         else:
             return "NO TYPE"
 
+    def save_on_interval(self, shared_info, worker_params={}):
+        save_interval = worker_params.get('epoch_save_interval', 2)
+        out_dir = worker_params.get('out_dir') or DEFAULT_DIR
+        experiment_name = worker_params.get('experiment_name', 'unk')
+        stay_alive = True
+        last_save = 0
+
+        while stay_alive:
+            self.start_time = time.time()
+            epochs = shared_info['total_steps'] / self.steps_per_epoch
+            if (epochs - last_save) >= save_interval:
+                with self.lock:
+                    self.agent.set_parameters(
+                        self.shared_agent.get_parameters()
+                    )
+                last_save = int(
+                    math.floor(epochs / save_interval) * save_interval
+                )
+                # Do the save
+                file_name = os.path.join(
+                    out_dir, f'{experiment_name}_epoch{last_save}.pt'
+                )
+                self.agent.checkpoint(file_name)
+                print(f'Saved Agent to {file_name}!')
+                # Wait 5 minutes
+                time.sleep(5 * 60)
+            else:
+                # Wait 1 minute and try again
+                time.sleep(60)
+            # Stop after 10 days
+            stay_alive = ((time.time() - self.start_time) / 3600 / 24) < 10
+
     def reset_metrics(self):
         self.metrics = dict(
             ep_score=0,
@@ -367,7 +401,7 @@ class Worker:
     def setup_logging(self, worker_params):
         self.mlflow_run_id = worker_params.get('mlflow_run_id')
         self.use_mlflow = self.mlflow_run_id is not None
-        self.metric_log_interval = worker_params.get('metric_log_interval', 2)
+        self.metric_log_interval = worker_params.get('metric_log_interval', 4)
         self.print_interval = worker_params.get('print_interval', 10)
 
         if self.use_mlflow:
@@ -387,7 +421,7 @@ class Worker:
         avg_score = shared_info['avg_score'].item()
         if (episode_num % self.print_interval) == 0:
             elap_time = (time.time() - self.start_time) / 60.0
-            epoch = shared_info['total_steps'].item() / self.epoch_steps
+            epoch = shared_info['total_steps'].item() / self.steps_per_epoch
             print(
                 f"Epoch: {epoch:0.2f}\t"
                 f"Episode {episode_num:.0f}\t"
@@ -399,7 +433,7 @@ class Worker:
                 metrics = {
                     'running_avg_score': avg_score,
                     'running_avg_loss': shared_info['avg_loss'].item(),
-                    'ep_avg_loss': self.metrics['ep_loss'] / self.metrics['ep_steps'],
+                    # 'ep_avg_loss': self.metrics['ep_loss'] / self.metrics['ep_steps'],
                     'ep_avg_grad_norm': self.metrics['ep_grad_norm'] / self.metrics['ep_batches'],
                     'ep_max_loss': self.metrics['max_loss'],
                     'ep_max_grad_norm': self.metrics['max_grad_norm']
@@ -791,7 +825,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
 
 def continuous_worker_thread(task_id, agent_params, train_params, env_params,
                              shared_agent, shared_info, worker_params, lock=None,
-                             worker=None):
+                             worker=None, save_mode=False):
     if worker is None:
         worker = Worker(
             task_id, agent_params, train_params, env_params,
@@ -799,9 +833,13 @@ def continuous_worker_thread(task_id, agent_params, train_params, env_params,
             eval_mode=False, render=False, lock=lock
         )
 
-    worker.continuously_train(shared_info, worker_params)
+    if save_mode:
+        worker.save_on_interval(shared_info, worker_params)
+    else:
+        worker.continuously_train(shared_info, worker_params)
 
     return worker
+
 
 def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                           steps_per_batch=5, total_step_limit=10000,
@@ -811,7 +849,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                           eval_interval=None, accumulate_grads=False,
                           experiment_name=None, load_file=None, save_interval=None,
                           use_mlflow=False, serial=False, shared_mode=True, render=False,
-                          use_lock=True, repro_mode=False):
+                          use_lock=True, repro_mode=False, metric_log_interval=4):
 
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -867,6 +905,9 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         'max_episodes': episode_limit,
         'metric_decay': avg_decay,
         'print_interval': log_interval,
+        'epoch_save_interval': save_interval,
+        'out_dir': out_dir,
+        'metric_log_interval': metric_log_interval,
     }
 
     worker_args = [
@@ -908,11 +949,26 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
             worker_process.start()
             processes.append(worker_process)
 
-        for p in processes:
-            p.join()
+        if save_interval is None:
+            print("Will not be saving agent checkpoints!")
+        else:
+            # A thread that saves every epoch interval
+            save_process = mp.Process(
+                target=continuous_worker_thread,
+                args=[i, *worker_args],
+                kwargs={'save_mode': True, 'lock': lock},
+            )
+            processes.append(save_process)
+            save_process.start()
 
-    if use_mlflow:
-        mlflow.end_run()
+        try:
+            for p in processes:
+                p.join()
+        except KeyboardInterrupt:
+            import ipdb; ipdb.set_trace()
+        finally:
+            if use_mlflow:
+                mlflow.end_run()
 
     solved = shared_info['solved'].item() > 0
     return global_agent, solved
