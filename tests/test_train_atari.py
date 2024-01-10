@@ -119,14 +119,10 @@ def test_space_invaders_adam():
         'clip_grad_norm': 50.0,
         'type': 'a2c-atari',
         'reward_clip': 1.0,
-        # 'n_exp_steps': 5.0,
     }
     train_params = {
         'optimizer': 'adam',
-        # 'lr': 8e-4,
-        # 'lr': 1e-3,
         'lr': 1e-4,
-        'alpha': 0.99,
     }
 
     env_name = 'ALE/SpaceInvaders-v5'
@@ -140,14 +136,11 @@ def test_space_invaders_adam():
     print("")  # For ease of reading
     agent, solved = a3c.train_loop_continuous(
         n_workers, agent_params, train_params, env_params,
-        # log_interval=500, seed=8888101888,
         log_interval=200, seed=8888101888,
-        # log_interval=10, seed=8888,
         total_step_limit=5e9,
         steps_per_batch=5, avg_decay=0.95,
         out_dir=os.path.join(DEFAULT_DIR, "a3c_test"),
         eval_interval=0.25, save_interval=2, use_mlflow=True,
-        # use_mlflow=False, serial=True
     )
 
     import ipdb; ipdb.set_trace()
