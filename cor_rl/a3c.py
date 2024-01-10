@@ -22,7 +22,7 @@ mlflow.set_tracking_uri(uri=MLFLOW_URI)
 
 
 def interact(env, agent, t_max=5, state=None, output_frames=False,
-             break_on_lost_life=True, lock=None):
+             break_on_lost_life=False, lock=None):
     """
     Does t_max steps of the agent in the environment.
     This is single threaded.
@@ -51,18 +51,18 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
         if output_frames:
             frame_buffer.append(env.render())
 
-        if state is None:
-            if break_on_lost_life:
-                # Lost a life: episode restart
-                break
-            else:
-                # Do a no-op to get some data and avoid triggering
-                # environment reset. This is for eval mode
-                state, reward, terminated_no_op, _, _ = env.step(0)
-                results.rewards.append(reward)
-                results.values.append(0.0)
-                results.log_probs.append(0.0)
-                results.entropies.append(0.0)
+        # if state is None:
+        #     if break_on_lost_life:
+        #         # Lost a life: episode restart
+        #         break
+        #     else:
+        #         # Do a no-op to get some data and avoid triggering
+        #         # environment reset. This is for eval mode
+        #         state, reward, terminated_no_op, _, _ = env.step(0)
+        #         results.rewards.append(reward)
+        #         results.values.append(0.0)
+        #         results.log_probs.append(0.0)
+        #         results.entropies.append(0.0)
         t += 1
 
     if terminated:

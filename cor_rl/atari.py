@@ -33,7 +33,7 @@ class AtariEnvWrapper:
     """
 
     def __init__(self, game_name, n_stack=4, n_repeat=4, reward_clip=None,
-                 trim_x=0, noop_max=30, **kwargs):
+                 trim_x=0, noop_max=30, lost_life_ends_ep=False, **kwargs):
         self.env = gym.make(game_name, obs_type='rgb', frameskip=1, **kwargs)
         self.n_repeat = n_repeat
         self.n_stack = n_stack
@@ -42,6 +42,7 @@ class AtariEnvWrapper:
         self.num_lives = 0
         self.trim_x = trim_x
         self.noop_max = noop_max
+        self.lost_life_ends_ep = lost_life_ends_ep
 
     def reload_frame_buffer(self, frame_0=None, frame_1=None):
         if frame_0 is None:
@@ -55,6 +56,7 @@ class AtariEnvWrapper:
         self.frame_buffer = [frame] * self.n_stack
 
     def step(self, action):
+        lost_a_life = False
         reward_buffer = []
         frame_skip_buffer = []
         for i in range(self.n_repeat):
@@ -67,7 +69,8 @@ class AtariEnvWrapper:
 
             # Detect a lost life and end the episode
             current_lives = info.get('lives', 0)
-            lost_a_life = current_lives != self.num_lives
+            if self.lost_life_ends_ep:
+                lost_a_life = current_lives != self.num_lives
             self.num_lives = current_lives
             if terminated:
                 break
