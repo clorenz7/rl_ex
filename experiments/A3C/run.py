@@ -61,7 +61,8 @@ def main():
 
     # # TODO: Make this all just an unpacking of experiment params
     n_workers = experiment_params['simulation_params'].pop('n_workers', 1)
-    experiment_params['simulation_params']['experiment_name'] = base_name
+    exp_name = experiment_params['simulation_params'].get('experiment_name', '')
+    experiment_params['simulation_params']['experiment_name'] = exp_name or base_name
 
     a3c.train_loop_continuous(
         n_workers,
