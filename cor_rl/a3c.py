@@ -363,8 +363,11 @@ class Worker:
         save_interval = worker_params.get('epoch_save_interval', 2)
         out_dir = worker_params.get('out_dir') or utils.DEFAULT_DIR
         experiment_name = worker_params.get('experiment_name', 'unk')
+        max_steps = worker_params.get('max_steps') or 200e6
+        max_episodes = worker_params.get('max_episodes') or 1e9
         stay_alive = True
         last_save = 0
+        timeout = worker_params.get('timeout', 3600 * 24 * 10)
 
         while stay_alive:
             self.start_time = time.time()
@@ -389,7 +392,11 @@ class Worker:
                 # Wait 1 minute and try again
                 time.sleep(60)
             # Stop after 10 days
-            stay_alive = ((time.time() - self.start_time) / 3600 / 24) < 10
+            stay_alive = (
+                shared_info['total_episodes'] < max_episodes and
+                shared_info['total_steps'] < max_steps and
+                (time.time() - self.start_time) < timeout
+            )
 
     def reset_metrics(self):
         self.metrics = dict(
