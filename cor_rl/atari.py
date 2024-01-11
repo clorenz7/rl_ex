@@ -76,29 +76,12 @@ class AtariEnvWrapper:
             if terminated:
                 break
             if lost_a_life:
-                # TODO: I think this should be down below
-                # Start the next life to initialize the frame buffer
-                # frame_0, _, _, _, _ = self.env.step(action)
-                # frame_1, _, _, _, _ = self.env.step(action)
-                # frame = preprocess_frames(
-                #     frame_1, frame_0,
-                #     trim_x=self.trim_x
-                # )
-                # self.frame_buffer = [frame] * self.n_stack
                 self.reload_frame_buffer(frame_0=frame, frame_1=frame)
                 break
 
         if terminated or lost_a_life:
             frames = None
         else:
-            # Pre-process and stack frames for the model
-            # for i in range(self.n_repeat):
-            #     frame = preprocess_frames(
-            #         self.frame_buffer[i+1], self.frame_buffer[i],
-            #         trim_x=self.trim_x
-            #     )
-            #     frames.append(frame)
-
             frame = preprocess_frames(
                 self.raw_frame_buffer[-1], self.raw_frame_buffer[-2],
                 trim_x=self.trim_x
@@ -107,15 +90,8 @@ class AtariEnvWrapper:
             self.frame_buffer = self.frame_buffer[-self.n_stack:]
 
             frames = torch.dstack(self.frame_buffer).permute(2, 0, 1)
-            # # Keep last frame to do the average next time
-            # self.frame_buffer = self.frame_buffer[-1:]
 
-        # TODO: Is clipping done here or frame by frame?
-        # Hypothesis: can't score more than once in a small interval of frames.
         total_reward = sum(reward_buffer)
-
-        # if len(frames) == 0:
-        #     frames = None
 
         return frames, total_reward, terminated, trunc, info
 
@@ -125,7 +101,6 @@ class AtariEnvWrapper:
             for f in self.raw_frame_buffer:
                 frame += f.astype(np.uint16)
             frame = frame / len(self.raw_frame_buffer)
-            # frames = torch.dstack(self.frame_buffer)
             return frame.astype(np.uint8)
         else:
             return self.env.render()
@@ -133,21 +108,13 @@ class AtariEnvWrapper:
     def reset(self, seed=None):
         # Reset the env and save initial frame
         frame, info = self.env.reset(seed=seed)
-        # self.frame_buffer = [torch.from_numpy(frame)] * self.n_stack
         self.reload_frame_buffer(frame_0=frame)
-        # prev_frame = frame
         self.num_lives = info.get('lives', 0)
 
         n_no_ops = self.env.np_random.integers(1, self.noop_max+1)
 
         for _ in range(n_no_ops):
-            # prev_frame = frame
             frames, total_reward, terminated, trunc, info = self.step(NO_OP)
-
-        # self.frame_buffer = [frame]
-        # # Repeat the frame N times to run through the model
-        # start_frame = preprocess_frames(frame, prev_frame)
-        # frames = torch.dstack([start_frame]*self.n_repeat).permute(2, 0, 1)
 
         return frames, info
 

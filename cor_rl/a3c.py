@@ -478,7 +478,6 @@ class Worker:
             results, state, terminated, frames = interact(
                 self.env, self.agent, t_max=max_steps_per_batch,
                 state=self.state, output_frames=save_frames,
-                break_on_lost_life=True,
             )
             self.frames.extend(frames)
             self.state = state
@@ -880,10 +879,6 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
     global_agent.zero_grad()
     if shared_mode:
         global_agent.share_memory()
-
-    # TODO: Move this to worker
-    # if use_mlflow:
-    #     mlflow.log_params(global_agent.params())
 
     lock = mp.Lock() if use_lock else None
 
