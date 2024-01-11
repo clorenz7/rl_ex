@@ -391,7 +391,6 @@ class Worker:
             else:
                 # Wait 1 minute and try again
                 time.sleep(60)
-            # Stop after 10 days
             stay_alive = (
                 shared_info['total_episodes'] < max_episodes and
                 shared_info['total_steps'] < max_steps and
@@ -400,13 +399,11 @@ class Worker:
 
     def reset_metrics(self):
         self.metrics = dict(
-            ep_score=0,
-            ep_loss=0,
+            ep_score=0, ep_loss=0,
             ep_grad_norm=0.0,
             max_loss=float('-inf'),
             max_grad_norm=float('-inf'),
-            ep_steps=0,
-            ep_batches=0
+            ep_steps=0, ep_batches=0
         )
 
     def setup_logging(self, worker_params):
@@ -436,7 +433,7 @@ class Worker:
             print(
                 f"Epoch: {epoch:0.2f}\t"
                 f"Episode {episode_num:.0f}\t"
-                f"Score: {avg_score:0.2f}\t"
+                f"Avg Score: {avg_score:0.2f}\t"
                 f"Time: {elap_time:0.2f}min\t"
             )
         if episode_num % self.metric_log_interval == 0:
@@ -461,20 +458,15 @@ class Worker:
                 avg_score
                 avg_loss
         """
-        keep_training = True
-        solved = False
-
-        self.reset_metrics()
-
+        keep_training, solved = True, False
         metric_decay = worker_params.get('metric_decay', 0.95)
         solved_thresh = worker_params.get('solved_thresh') or float('inf')
-
         max_steps_per_batch = worker_params.get('max_steps_per_batch', 5)
         max_steps = worker_params.get('max_steps') or 200e6
         max_episodes = worker_params.get('max_episodes') or 1e9
         save_frames = worker_params.get('save_frames', False)
 
-        # Setup logging (mlflow experiment, etc)
+        self.reset_metrics()
         self.setup_logging(worker_params)
 
         while keep_training:
@@ -489,7 +481,6 @@ class Worker:
             self.frames.extend(frames)
             self.state = state
             loss, norm_val = self.agent.calc_loss_and_backprop(results)
-            # with lock:
             if shared_info['solved'].item() == 0:
                 with self.lock:
                     self.shared_opt.zero_grad(set_to_none=True)
@@ -497,7 +488,6 @@ class Worker:
                     self.shared_opt.step()
             else:
                 break
-            # end with lock
 
             n_steps = len(results.rewards)
             self.metrics['ep_score'] += sum(results.rewards)
