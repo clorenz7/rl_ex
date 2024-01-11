@@ -111,6 +111,42 @@ def test_space_invaders_a3c():
     import ipdb; ipdb.set_trace()
 
 
+def test_space_invaders_render():
+    agent_params = {
+        'n_actions': 6,
+        'gamma': 0.99,
+        'entropy_weight': 0.01,
+        'clip_grad_norm': 50.0,
+        'type': 'a2c-atari',
+        'reward_clip': 1.0,
+    }
+    train_params = {
+        'optimizer': 'adam',
+        'lr': 0,
+    }
+    env_name = 'ALE/SpaceInvaders-v5'
+
+    env_params = {
+        'env_name': env_name,
+        'repeat_action_probability': 0.0,
+    }
+    n_workers = 1
+    load_file = os.path.join(
+        DEFAULT_DIR, "a3c_test",
+        '2024_Jan_10_H10_32_epoch12.pt'
+    )
+
+    print("")  # For ease of reading
+    agent, solved = a3c.train_loop_continuous(
+        n_workers, agent_params, train_params, env_params,
+        log_interval=1, seed=101018888,
+        episode_limit=1,
+        steps_per_batch=5000000, avg_decay=0.0,
+        load_file=load_file,
+        use_mlflow=False, render=True, serial=True, use_lock=False
+    )
+
+
 def test_space_invaders_adam():
     agent_params = {
         'n_actions': 6,
@@ -144,3 +180,4 @@ def test_space_invaders_adam():
     )
 
     import ipdb; ipdb.set_trace()
+

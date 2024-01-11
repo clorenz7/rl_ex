@@ -825,12 +825,12 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
 
 def continuous_worker_thread(task_id, agent_params, train_params, env_params,
                              shared_agent, shared_info, worker_params, lock=None,
-                             worker=None, save_mode=False):
+                             worker=None, render=False, save_mode=False):
     if worker is None:
         worker = Worker(
             task_id, agent_params, train_params, env_params,
             shared_agent=shared_agent, shared_opt=shared_agent.optimizer,
-            eval_mode=False, render=False, lock=lock
+            eval_mode=False, render=render, lock=lock
         )
 
     if save_mode:
@@ -848,8 +848,9 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                           avg_decay=0.95, debug=False, out_dir=None,
                           eval_interval=None, accumulate_grads=False,
                           experiment_name=None, load_file=None, save_interval=None,
-                          use_mlflow=False, serial=False, shared_mode=True, render=False,
-                          use_lock=True, repro_mode=False, metric_log_interval=4):
+                          use_mlflow=False, serial=False, shared_mode=True,
+                          render=False, use_lock=True, repro_mode=False,
+                          metric_log_interval=4):
 
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -917,7 +918,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
 
     if serial:
         if n_workers == 1:
-            continuous_worker_thread(0, *worker_args, lock=None)
+            continuous_worker_thread(0, *worker_args, lock=None, render=render)
         else:
             worker_params['max_steps'] = steps_per_batch
             worker_params['mlflow_run_id'] = None
