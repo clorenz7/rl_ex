@@ -1,6 +1,4 @@
 from collections import namedtuple
-import random
-import time
 
 import numpy as np
 import torch
@@ -99,7 +97,6 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         pdf = Categorical(policy)
         action = pdf.sample()
-        # print((policy, action.item()))
         log_prob = pdf.log_prob(action)
         entropy = pdf.entropy()
 
@@ -153,7 +150,6 @@ class AdvantageActorCriticAgent(BaseAgent):
         policy_loss = -torch.hstack(results.log_probs) * advantage
 
         loss = self.value_loss_factor * value_loss.sum() + policy_loss.sum()
-        # loss = value_loss.mean() + policy_loss.mean()
 
         if self.n_exp_steps:
             loss = loss * (self.n_exp_steps / n_steps)
@@ -161,10 +157,6 @@ class AdvantageActorCriticAgent(BaseAgent):
         if self.entropy_weight > 0:
             entropy_loss = torch.hstack(results.entropies)
             loss = loss - entropy_loss.sum() * self.entropy_weight
-            # loss = loss - entropy_loss.mean() * self.entropy_weight
-
-        # # Add max entropy in order to keep it positive
-        # loss = loss + self.max_entropy
 
         return loss
 
@@ -195,12 +187,6 @@ class AdvantageActorCriticAgent(BaseAgent):
     def sync_grads(self, other_net):
 
         for self_p, other_p in zip(self.net.parameters(), other_net.parameters()):
-            # if other_p.grad is not None:
-            #     # Sleep for a random amount of time (up to 100ms) to break deadlocks
-            #     # time.sleep(np.random.exponential(scale=0.5))
-            #     time.sleep(random.random()/10.0)
-            #     return
-            # other_p._grad = self_p.grad
             if other_p.grad is None:
                 other_p._grad = self_p.grad
 
@@ -229,12 +215,6 @@ class AdvantageActorCriticAgent(BaseAgent):
             )
 
         grads = self.get_grads()
-
-        # norm_val = nn.utils.clip_grad_norm_(self.net.parameters(), self.grad_clip)
-        # grads2 = {}
-        # for name, param in self.net.named_parameters():
-        #     grads2[name] = param.grad.detach()
-        # print(norm_val)
 
         return grads, loss
 

@@ -51,19 +51,6 @@ def interact(env, agent, t_max=5, state=None, output_frames=False,
 
         if output_frames:
             frame_buffer.append(env.render())
-
-        # if state is None:
-        #     if break_on_lost_life:
-        #         # Lost a life: episode restart
-        #         break
-        #     else:
-        #         # Do a no-op to get some data and avoid triggering
-        #         # environment reset. This is for eval mode
-        #         state, reward, terminated_no_op, _, _ = env.step(0)
-        #         results.rewards.append(reward)
-        #         results.values.append(0.0)
-        #         results.log_probs.append(0.0)
-        #         results.entropies.append(0.0)
         t += 1
 
     if terminated:
@@ -240,7 +227,6 @@ class Worker:
                  shared_agent, shared_opt=None, eval_mode=False, render=False,
                  lock=None, steps_per_epoch=1e6):
         self.eval_mode = eval_mode
-        # self.shared_mode = agent is not None
         self.task_id = task_id
         self.lock = lock or nullcontext()
         self.steps_per_epoch = steps_per_epoch
@@ -268,18 +254,11 @@ class Worker:
         if not eval_mode:
             self.state = None  # Force reset to match previous work
 
-        # if not self.shared_mode:
-        #     self.agent = cor_rl.agents.factory(agent_params, train_params)
-        # else:
-        #     self.agent = agent
         self.agent = cor_rl.agents.factory(agent_params, train_params)
         self.shared_agent = shared_agent
         self.shared_opt = shared_opt
 
         self.frames = []
-
-        # Turning off to match Cart Pole Reference
-        # torch.manual_seed(self.task_seed)  # Reset seed to match previous work
 
     def handle_task(self, task):
         task_type = task.get('type', '')
