@@ -1,0 +1,33 @@
+{
+    "agent_params": {
+        "n_actions": 6,
+        "gamma": 0.99,
+        "entropy_weight": 0.01,
+        "clip_grad_norm": 50.0,
+        "type": "a2c-atari",
+        "reward_clip": 1.0
+    },
+    "train_params": {
+        "optimizer": "adam",
+        "lr": 0.0
+    },
+    "env_params": {
+        "env_name": "ALE/SpaceInvaders-v5",
+        "repeat_action_probability": 0.0
+    },
+    "simulation_params": {
+        // This achieves a score of 980
+        "seed": 101,
+        "load_file": "/Users/cory/rl_results/a3c_test/2024_Jan_10_H10_32_epoch48.pt",
+        "save_gif": "/Users/cory/rl_results/a3c_test/2024_Jan_10_H10_32_epoch48.gif",
+        "n_workers": 1,
+        "log_interval": 1,
+        "episode_limit": 1,
+        "steps_per_batch": 5000000,
+        "avg_decay": 0.0,
+        "use_mlflow": false,
+        "serial": true,
+        "use_lock": false,
+        "render": false
+    }
+}
