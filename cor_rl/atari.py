@@ -43,6 +43,7 @@ class AtariEnvWrapper:
         self.trim_x = trim_x
         self.noop_max = noop_max
         self.lost_life_ends_ep = lost_life_ends_ep
+        self.raw_frame_buffer = []
 
     def reload_frame_buffer(self, frame_0=None, frame_1=None):
         if frame_0 is None:
@@ -58,10 +59,10 @@ class AtariEnvWrapper:
     def step(self, action):
         lost_a_life = False
         reward_buffer = []
-        frame_skip_buffer = []
+        self.raw_frame_buffer = []
         for i in range(self.n_repeat):
             frame, reward, terminated, trunc, info = self.env.step(action)
-            frame_skip_buffer.append(frame)
+            self.raw_frame_buffer.append(frame)
 
             if self.reward_clip:
                 reward = min(max(reward, -self.reward_clip), self.reward_clip)
@@ -99,7 +100,7 @@ class AtariEnvWrapper:
             #     frames.append(frame)
 
             frame = preprocess_frames(
-                frame_skip_buffer[-1], frame_skip_buffer[-2],
+                self.raw_frame_buffer[-1], self.raw_frame_buffer[-2],
                 trim_x=self.trim_x
             )
             self.frame_buffer.append(frame)
@@ -117,6 +118,17 @@ class AtariEnvWrapper:
         #     frames = None
 
         return frames, total_reward, terminated, trunc, info
+
+    def render(self):
+        if self.raw_frame_buffer:
+            frame = 0
+            for f in self.raw_frame_buffer:
+                frame += f.astype(np.uint16)
+            frame = frame / len(self.raw_frame_buffer)
+            # frames = torch.dstack(self.frame_buffer)
+            return frame.astype(np.uint8)
+        else:
+            return self.env.render()
 
     def reset(self, seed=None):
         # Reset the env and save initial frame

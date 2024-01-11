@@ -131,19 +131,31 @@ def test_space_invaders_render():
         'repeat_action_probability': 0.0,
     }
     n_workers = 1
+    # Cherry picked
+    # seed = 1018888
+    # load_file = os.path.join(
+    #     DEFAULT_DIR, "a3c_test",
+    #     '2024_Jan_10_H10_32_epoch12.pt'
+    # )
+    seed = 101  # Cherry picked. Gets a score of 920
     load_file = os.path.join(
         DEFAULT_DIR, "a3c_test",
-        '2024_Jan_10_H10_32_epoch12.pt'
+        '2024_Jan_10_H10_32_epoch16.pt'
+    )
+    gif_file = os.path.join(
+        DEFAULT_DIR, "a3c_test",
+        '2024_Jan_10_H10_32_epoch16.gif'
     )
 
     print("")  # For ease of reading
     agent, solved = a3c.train_loop_continuous(
         n_workers, agent_params, train_params, env_params,
-        log_interval=1, seed=101018888,
+        log_interval=1, seed=seed,
         episode_limit=1,
         steps_per_batch=5000000, avg_decay=0.0,
         load_file=load_file,
-        use_mlflow=False, render=True, serial=True, use_lock=False
+        use_mlflow=False, serial=True, use_lock=False,
+        save_gif=gif_file, render=False,
     )
 
 

@@ -12,11 +12,11 @@ import torch
 
 import cor_rl.agents
 from cor_rl import environments
+from cor_rl import utils
 from cor_rl.agents.a2c import (
     InteractionResult,
     AdvantageActorCriticAgent
 )
-from cor_rl.utils import DEFAULT_DIR
 
 MLFLOW_URI = "http://127.0.0.1:8888"
 mlflow.set_tracking_uri(uri=MLFLOW_URI)
@@ -253,6 +253,8 @@ class Worker:
 
         if render and task_id == 0:
             env_params['render_mode'] = 'human'
+        else:
+            env_params['render_mode'] = 'rgb_array'
 
         env_name = env_params.pop('env_name')
         self.seed = env_params.pop('seed', 8888)
@@ -273,6 +275,8 @@ class Worker:
         self.agent = cor_rl.agents.factory(agent_params, train_params)
         self.shared_agent = shared_agent
         self.shared_opt = shared_opt
+
+        self.frames = []
 
         # Turning off to match Cart Pole Reference
         # torch.manual_seed(self.task_seed)  # Reset seed to match previous work
@@ -357,7 +361,7 @@ class Worker:
 
     def save_on_interval(self, shared_info, worker_params={}):
         save_interval = worker_params.get('epoch_save_interval', 2)
-        out_dir = worker_params.get('out_dir') or DEFAULT_DIR
+        out_dir = worker_params.get('out_dir') or utils.DEFAULT_DIR
         experiment_name = worker_params.get('experiment_name', 'unk')
         stay_alive = True
         last_save = 0
@@ -461,6 +465,8 @@ class Worker:
         max_steps_per_batch = worker_params.get('max_steps_per_batch', 5)
         max_steps = worker_params.get('max_steps') or 200e6
         max_episodes = worker_params.get('max_episodes') or 1e9
+        save_frames = worker_params.get('save_frames', False)
+
         # Setup logging (mlflow experiment, etc)
         self.setup_logging(worker_params)
 
@@ -471,9 +477,10 @@ class Worker:
 
             results, state, terminated, frames = interact(
                 self.env, self.agent, t_max=max_steps_per_batch,
-                state=self.state, output_frames=False,
+                state=self.state, output_frames=save_frames,
                 break_on_lost_life=True,
             )
+            self.frames.extend(frames)
             self.state = state
             loss, norm_val = self.agent.calc_loss_and_backprop(results)
             # with lock:
@@ -850,7 +857,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                           experiment_name=None, load_file=None, save_interval=None,
                           use_mlflow=False, serial=False, shared_mode=True,
                           render=False, use_lock=True, repro_mode=False,
-                          metric_log_interval=4):
+                          metric_log_interval=4, save_gif=''):
 
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -909,6 +916,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         'epoch_save_interval': save_interval,
         'out_dir': out_dir,
         'metric_log_interval': metric_log_interval,
+        'save_frames': bool(save_gif),
     }
 
     worker_args = [
@@ -918,7 +926,10 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
 
     if serial:
         if n_workers == 1:
-            continuous_worker_thread(0, *worker_args, lock=None, render=render)
+            worker = continuous_worker_thread(0, *worker_args, lock=None, render=render)
+            if save_gif:
+                utils.write_gif(worker.frames, save_gif, fps=30)
+
         else:
             worker_params['max_steps'] = steps_per_batch
             worker_params['mlflow_run_id'] = None
