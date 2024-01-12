@@ -877,6 +877,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
     if use_mlflow:
         mlflow.set_experiment(experiment_name)
         active_run = mlflow.start_run(run_name=run_name)
+        mlflow.log_param('n_workers', n_workers)
         mlflow_run_id = active_run.info.run_id
         if not run_name:
             run_name = active_run.info.run_name
