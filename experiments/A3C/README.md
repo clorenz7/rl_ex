@@ -31,8 +31,8 @@ I had to make some modifications relative to the paper to get this to work:
 
 - I used the Adam optimizer
 - I implemented a thread lock on the global agent when backpropagating and updating parameters
-- I turned the learning rate down to 1e-4
-- I did not end episodes on loss of life. This was suggested in follow up work, and I think it simplified my code and made it easier to train.
+- I turned the learning rate down to 1e-4 since Adam has a momentum term and momentum was not used in the original paper.
+- I did not end episodes on loss of life. This was suggested in follow up work, and I think it simplified my code and made training more stable.
 - I did not utilize an annealing learning rate scheduler.
 - Gradient norm clipping was set to 50 (as seen in a few open source implementations)
 - I used 6 threads instead of 4, 8, of 16 since the M2 has 8 cores and I needed to run other programs.
@@ -42,7 +42,9 @@ Here is a GIF of the agent playing the game at epoch 48.
 ![playing](./assets/2024_Jan_10_H10_32_epoch48.gif)
 
 
-## Milestone 3: Reproduction of Training Curve
+## Milestone 3: Reproduction of Training Curves
+
+### Space Invaders
 
 Curiously, the result in the plot below represents the average of the top three learning rates. Given that there are 3 positive outlier points in the figure above, and my compute limited compute budget, I did not feel compelled to replicate this slightly cherry-picked result.
 
@@ -56,5 +58,26 @@ Here is a less smoothed version (running average with a decay rate of 0.95, repo
 
 ![raw](./assets/space_invaders_adam_raw_result.png)
 
-As can be seen in the GIF above, the game gets significantly more challenging when the score reaches around 600 and the last enemies speed up significantly and the game ends if the fast enemy reaches the bottom. This can be observed in the training curve, where the rate of progress slows down near that point.
+As can be seen in the GIF above, the game gets significantly more challenging when the score reaches around 600, the last enemies speed up significantly, and the game ends if the fast enemy reaches the bottom. This can be observed in the training curve, where the rate of progress slows down near that point.
+
+### Pong
+
+Below shows the heavily and less  smoothed training curves for Pong, which was solved in roughly 2 hours. The hyperparameters were the same as above, except 7 agent threads were used.
+
+![smoothed_pong](./assets/pong_training_smooth.png)
+
+![raw_pong](./assets/pong_training_raw.png)
+
+These compare favorably with the training curves in the paper:
+
+![paper_pong](./assets/pong_training_curve.png)
+
+Upon rendering the game, it was discovered that due to the deterministic nature of the Atari system, the agent was able to setup a serve-shot-score loop against the opponent to run up the score very quickly.
+
+![boring_pong](./assets/boring_A3C_Pong_epoch30.gif)
+
+This makes the games quite boring, so I re-introduced the reccommended random action probability of 25% to the environment which adds randomness to the state and an extra challenge for the agent. The same serve-shot-score loop can be observed a few times, but is quickly broken by the action randomness. One can also observe the agent randomly missing easy volleys, but also scoring in a variety of situations:
+
+![mid_training_pong](./assets/A3C_Pong_jan12_epoch12.gif)
+
 
