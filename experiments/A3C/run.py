@@ -62,6 +62,10 @@ def main():
     n_workers = experiment_params['simulation_params'].pop('n_workers', 1)
     exp_name = experiment_params['simulation_params'].get('experiment_name', '')
     experiment_params['simulation_params']['experiment_name'] = exp_name or base_name
+    run_name = experiment_params['simulation_params'].get('run_name')
+    seed = experiment_params['simulation_params'].get('seed')
+    if run_name and seed and cli_args.json:
+        run_name = f"{base_name}_{seed}"
 
     a3c.train_loop_continuous(
         n_workers,

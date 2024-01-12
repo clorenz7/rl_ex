@@ -399,6 +399,7 @@ class Worker:
             if self.task_id == 0:
                 params = self.agent.params()
                 params['repeat_action_probability'] = self.env.spec.kwargs.get('repeat_action_probability', -0.01)
+                params['seed'] = self.seed
                 mlflow.log_params(params)
 
         self.start_time = time.time()
@@ -878,7 +879,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         active_run = mlflow.start_run(run_name=run_name)
         mlflow_run_id = active_run.info.run_id
         if not run_name:
-            run_name = active_run.info.run_naame
+            run_name = active_run.info.run_name
 
     worker_params = {
         'experiment_name': experiment_name,
