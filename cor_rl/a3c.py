@@ -342,6 +342,8 @@ class Worker:
         save_interval = worker_params.get('epoch_save_interval', 2)
         out_dir = worker_params.get('out_dir') or utils.DEFAULT_DIR
         experiment_name = worker_params.get('experiment_name', 'unk')
+        now = datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
+        run_name = worker_params.get('run_name') or now
         max_steps = worker_params.get('max_steps') or 200e6
         max_episodes = worker_params.get('max_episodes') or 1e9
         stay_alive = True
@@ -361,7 +363,7 @@ class Worker:
                 )
                 # Do the save
                 file_name = os.path.join(
-                    out_dir, f'{experiment_name}_epoch{last_save}.pt'
+                    out_dir, f'{experiment_name}_{run_name}_epoch{last_save}.pt'
                 )
                 self.agent.checkpoint(file_name)
                 print(f'Saved Agent to {file_name}!')
@@ -395,7 +397,9 @@ class Worker:
             mlflow.set_experiment(worker_params['experiment_name'])
             mlflow.start_run(self.mlflow_run_id, nested=True)
             if self.task_id == 0:
-                mlflow.log_params(self.agent.params())
+                params = self.agent.params()
+                params['repeat_action_probability'] = self.env.spec.kwargs.get('repeat_action_probability', -0.01)
+                mlflow.log_params(params)
 
         self.start_time = time.time()
 
@@ -832,7 +836,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                           experiment_name=None, load_file=None, save_interval=None,
                           use_mlflow=False, serial=False, shared_mode=True,
                           render=False, use_lock=True, repro_mode=False,
-                          metric_log_interval=4, save_gif=''):
+                          metric_log_interval=4, save_gif='', run_name=None):
 
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -871,8 +875,10 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
     mlflow_run_id = None
     if use_mlflow:
         mlflow.set_experiment(experiment_name)
-        active_run = mlflow.start_run()
+        active_run = mlflow.start_run(run_name=run_name)
         mlflow_run_id = active_run.info.run_id
+        if not run_name:
+            run_name = active_run.info.run_naame
 
     worker_params = {
         'experiment_name': experiment_name,
@@ -888,6 +894,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         'out_dir': out_dir,
         'metric_log_interval': metric_log_interval,
         'save_frames': bool(save_gif),
+        'run_name': run_name,
     }
 
     worker_args = [
