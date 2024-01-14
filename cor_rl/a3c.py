@@ -259,6 +259,7 @@ class Worker:
         self.shared_opt = shared_opt
 
         self.frames = []
+        self.reset_metrics()
 
     def handle_task(self, task):
         task_type = task.get('type', '')
@@ -417,7 +418,7 @@ class Worker:
             print(
                 f"Epoch: {epoch:0.2f}\t"
                 f"Episode {episode_num:.0f}\t"
-                f"Avg Score: {avg_score:0.2f}\t"
+                f"Avg Score: {avg_score:0.2f} \t"
                 f"Time: {elap_time:0.2f}min\t"
             )
         if episode_num % self.metric_log_interval == 0:
@@ -449,8 +450,10 @@ class Worker:
         max_steps = worker_params.get('max_steps') or 200e6
         max_episodes = worker_params.get('max_episodes') or 1e9
         save_frames = worker_params.get('save_frames', False)
+        single_batch = worker_params.get('single_batch', False)
 
-        self.reset_metrics()
+        if not single_batch:
+            self.reset_metrics()
         self.setup_logging(worker_params)
 
         while keep_training:
@@ -462,7 +465,8 @@ class Worker:
                 self.env, self.agent, t_max=max_steps_per_batch,
                 state=self.state, output_frames=save_frames,
             )
-            self.frames.extend(frames)
+            if save_frames:
+                self.frames.extend(frames)
             self.state = state
             loss, norm_val = self.agent.calc_loss_and_backprop(results)
             if shared_info['solved'].item() == 0:
@@ -519,6 +523,8 @@ class Worker:
                 shared_info['total_episodes'] < max_episodes and
                 shared_info['total_steps'] < max_steps
             )
+            if single_batch:
+                break
 
         self.teardown_logging()
 
@@ -812,7 +818,7 @@ def train_loop_parallel(n_workers, agent_params, train_params, env_params,
 
 def continuous_worker_thread(task_id, agent_params, train_params, env_params,
                              shared_agent, shared_info, worker_params, lock=None,
-                             worker=None, render=False, save_mode=False):
+                             worker=None, render=False, save_mode=False, setup_only=False):
     if worker is None:
         worker = Worker(
             task_id, agent_params, train_params, env_params,
@@ -820,7 +826,9 @@ def continuous_worker_thread(task_id, agent_params, train_params, env_params,
             eval_mode=False, render=render, lock=lock
         )
 
-    if save_mode:
+    if setup_only:
+        pass
+    elif save_mode:
         worker.save_on_interval(shared_info, worker_params)
     else:
         worker.continuously_train(shared_info, worker_params)
@@ -911,13 +919,17 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                 utils.write_gif(worker.frames, save_gif, fps=30)
 
         else:
-            worker_params['max_steps'] = steps_per_batch
+            worker_params['single_batch'] = True
             worker_params['mlflow_run_id'] = None
             # Initialize the workers
             workers = []
             for i in range(n_workers):
-                worker = continuous_worker_thread(i, *worker_args, lock=None)
+                worker = continuous_worker_thread(i, *worker_args, lock=lock, setup_only=True)
                 workers.append(worker)
+
+            # Set seed to have same action selection in serial (debugging) mode
+            if seed and not repro_mode:
+                torch.manual_seed(seed)
 
             keep_training = True
             while keep_training:
@@ -925,11 +937,13 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                     continuous_worker_thread(
                         i, *worker_args, lock=None, worker=workers[i]
                     )
-                keep_training = (
-                    shared_info['solved'] == 0 and
-                    shared_info['total_steps'] < total_step_limit and
-                    shared_info['total_episodes'] < episode_limit
-                )
+                    keep_training = (
+                        shared_info['solved'] == 0 and
+                        shared_info['total_steps'] < total_step_limit and
+                        shared_info['total_episodes'] < episode_limit
+                    )
+                    if not keep_training:
+                        break
     else:
         processes = []
         for i in range(n_workers):
