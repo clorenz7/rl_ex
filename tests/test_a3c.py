@@ -66,26 +66,15 @@ def test_cart_pole_train_pt_rep():
         'weight_decay': 0.0,
     }
 
-    if False:
-        print("")
-        agent, solved = a3c.train_loop_parallel(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=10,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=10000,
-            debug=False, serial=True, seed=543,
-            shared_mode=True, repro_mode=True
-        )
-    else:
-        print("")
-        agent, solved = a3c.train_loop_continuous(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=10,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=10000,
-            debug=False, serial=True, seed=543,
-            shared_mode=True, repro_mode=True
-        )
+    print("")
+    agent, solved = a3c.train_loop_continuous(
+        1, agent_params, train_params, 'CartPole-v1',
+        total_step_limit=1e9, episode_limit=2000, log_interval=10,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        steps_per_batch=10000,
+        debug=False, serial=True, seed=543,
+        shared_mode=True, repro_mode=True
+    )
 
     assert solved
 
@@ -159,24 +148,14 @@ def test_cart_pole_train_batched():
     steps_per_batch = 125
 
     print("")
-    if False:
-        agent, solved = a3c.train_loop_parallel(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=steps_per_batch, seed=seed,
-            debug=False, serial=True,
-            shared_mode=True
-        )
-    else:
-        agent, solved = a3c.train_loop_continuous(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=steps_per_batch, seed=seed,
-            debug=False, serial=True,
-            shared_mode=True
-        )
+    agent, solved = a3c.train_loop_continuous(
+        1, agent_params, train_params, 'CartPole-v1',
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        steps_per_batch=steps_per_batch, seed=seed,
+        debug=False, serial=True,
+        shared_mode=True
+    )
     assert solved
 
 
@@ -203,22 +182,13 @@ def test_cart_pole_train_arch():
         'lr': 1e-3 * 2,
     }
     print("")
-    if False:
-        agent, solved = a3c.train_loop_parallel(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=1250,
-            debug=False, serial=True, seed=543, shared_mode=True
-        )
-    else:
-        agent, solved = a3c.train_loop_continuous(
-            1, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=1250,
-            debug=False, serial=True, seed=543, shared_mode=True
-        )
+    agent, solved = a3c.train_loop_continuous(
+        1, agent_params, train_params, 'CartPole-v1',
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        steps_per_batch=1250,
+        debug=False, serial=True, seed=543, shared_mode=True
+    )
 
     assert solved
 
@@ -251,24 +221,14 @@ def test_cart_pole_train_multi():
     steps_per_batch = 15 * 10
 
     print("")
-    if False:
-        agent, solved = a3c.train_loop_parallel(
-            n_threads, agent_params, train_params, env_name,
-            total_step_limit=1e9, episode_limit=2000, log_interval=10,
-            solved_thresh=gym.make(env_name).spec.reward_threshold,
-            steps_per_batch=steps_per_batch,
-            debug=False, seed=seed,
-            serial=True, shared_mode=True
-        )
-    else:
-        agent, solved = a3c.train_loop_continuous(
-            n_threads, agent_params, train_params, env_name,
-            total_step_limit=1e9, episode_limit=2000, log_interval=10,
-            solved_thresh=gym.make(env_name).spec.reward_threshold,
-            steps_per_batch=steps_per_batch,
-            debug=False, seed=seed,
-            serial=True, shared_mode=True
-        )
+    agent, solved = a3c.train_loop_continuous(
+        n_threads, agent_params, train_params, env_name,
+        total_step_limit=1e9, episode_limit=2000, log_interval=10,
+        solved_thresh=gym.make(env_name).spec.reward_threshold,
+        steps_per_batch=steps_per_batch,
+        debug=False, seed=seed,
+        serial=True, shared_mode=True
+    )
 
     assert solved
 
@@ -288,7 +248,6 @@ def test_cart_pole_train_a3c():
     }
     train_params = {
         'optimizer': 'adam',
-        # 'lr': 4e-3,
         'lr': 8e-4,
         'weight_decay': 0.0,
     }
@@ -297,20 +256,12 @@ def test_cart_pole_train_a3c():
     n_workers = 4
 
     print("")  # For ease of reading
-    if False:
-        agent, solved = a3c.train_loop_parallel(
-            n_workers, agent_params, train_params, env_name,
-            log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
-            solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
-            debug=False, use_mlflow=False, use_lock=True
-        )
-    else:
-        agent, solved = a3c.train_loop_continuous(
-            n_workers, agent_params, train_params, env_name,
-            log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
-            solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
-            debug=False, use_mlflow=False, use_lock=True
-        )
+    agent, solved = a3c.train_loop_continuous(
+        n_workers, agent_params, train_params, env_name,
+        log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
+        solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
+        debug=False, use_mlflow=False, use_lock=True
+    )
     assert solved
 
     make_gif = False
