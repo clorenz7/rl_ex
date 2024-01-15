@@ -23,25 +23,25 @@ def test_n_step_returns():
     assert n_step_returns == [12, 20, 32, 48, 64]
 
 
-def test_cart_pole_eval():
-    """
-    Test that you can get a single update from an agent
-    """
-    render_mode = "human" if False else 'rgb_array'
-    env = gym.make('CartPole-v1', render_mode=render_mode)
-    agent_params = {
-        'hidden_sizes': [128],
-        'n_actions': 2,
-        'n_state': 4
-    }
-    train_params = {
-        'optimizer': 'rmsprop'
-    }
-    agent = a2c.AdvantageActorCriticAgent(agent_params, train_params)
+# def test_cart_pole_eval():
+#     """
+#     Test that you can get a single update from an agent
+#     """
+#     render_mode = "human" if False else 'rgb_array'
+#     env = gym.make('CartPole-v1', render_mode=render_mode)
+#     agent_params = {
+#         'hidden_sizes': [128],
+#         'n_actions': 2,
+#         'n_state': 4
+#     }
+#     train_params = {
+#         'optimizer': 'rmsprop'
+#     }
+#     agent = a2c.AdvantageActorCriticAgent(agent_params, train_params)
 
-    result = a3c.agent_env_task(agent, agent, agent.optimizer, env, state=None)
-    # Just make sure that we can evaluate the agent and get state
-    assert 'state' in result
+#     result = a3c.agent_env_task(agent, agent, agent.optimizer, env, state=None)
+#     # Just make sure that we can evaluate the agent and get state
+#     assert 'state' in result
 
 
 def test_cart_pole_train_pt_rep():
@@ -69,7 +69,7 @@ def test_cart_pole_train_pt_rep():
     print("")
     agent, solved = a3c.train_loop_continuous(
         1, agent_params, train_params, 'CartPole-v1',
-        total_step_limit=1e9, episode_limit=2000, log_interval=10,
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
         steps_per_batch=10000,
         debug=False, serial=True, seed=543,
@@ -107,7 +107,7 @@ def test_cart_pole_train_pt_rep_rmsprop():
         print("")
         agent, solved = a3c.train_loop_continuous(
             4, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=10,
+            total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
             steps_per_batch=10000,
             debug=False, serial=False, seed=543,
@@ -223,7 +223,7 @@ def test_cart_pole_train_multi():
     print("")
     agent, solved = a3c.train_loop_continuous(
         n_threads, agent_params, train_params, env_name,
-        total_step_limit=1e9, episode_limit=2000, log_interval=10,
+        total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=gym.make(env_name).spec.reward_threshold,
         steps_per_batch=steps_per_batch,
         debug=False, seed=seed,

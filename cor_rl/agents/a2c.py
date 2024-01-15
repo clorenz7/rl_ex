@@ -83,6 +83,7 @@ class AdvantageActorCriticAgent(BaseAgent):
             'reward_clip': self.reward_clip,
             'lr': self.optimizer.param_groups[0]['lr'],
             'optimizer': self.optimizer_name,
+            'value_loss_factor': self.value_loss_factor,
         }
 
     def select_action(self, state=None, lock=None):
@@ -101,7 +102,6 @@ class AdvantageActorCriticAgent(BaseAgent):
         entropy = pdf.entropy()
 
         return action.item(), value_est, entropy, log_prob
-
 
     def construct_net(self):
         return PolicyValueNetwork(
@@ -180,43 +180,11 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         return state_dict
 
-    def set_grads(self, grads):
-        for name, param in self.net.named_parameters():
-            param.grad = grads[name]
-
     def sync_grads(self, other_net):
 
         for self_p, other_p in zip(self.net.parameters(), other_net.parameters()):
             if other_p.grad is None:
                 other_p._grad = self_p.grad
-
-    def accumulate_grads(self, grads):
-        for name, param in self.net.named_parameters():
-            if param.grad is None:
-                param.grad = grads[name]
-            else:
-                param.grad = param.grad + grads[name]
-
-    def get_grads(self):
-        grads = {}
-        for name, param in self.net.named_parameters():
-            grads[name] = param.grad.detach()
-
-        return grads
-
-    def calc_and_get_grads(self, results: InteractionResult):
-        # Compute the loss
-        loss = self.calculate_loss(results)
-        loss.backward()
-
-        if self.clip_grad_norm > 0:
-            norm_val = nn.utils.clip_grad_norm_(
-                self.net.parameters(), self.clip_grad_norm
-            )
-
-        grads = self.get_grads()
-
-        return grads, loss
 
     def calc_loss_and_backprop(self, results: InteractionResult):
         # Compute the loss
@@ -228,39 +196,6 @@ class AdvantageActorCriticAgent(BaseAgent):
             self.net.parameters(), self.clip_grad_norm or 1e9
         )
         return loss, norm_val
-
-    def calc_total_loss_and_backprop(self, loss_list):
-        loss = 0.0
-        for loss_val in loss_list:
-            loss = loss + loss_val
-        loss.backward()
-
-        if self.clip_grad_norm > 0:
-            norm_val = nn.utils.clip_grad_norm_(
-                self.net.parameters(), self.clip_grad_norm
-            )
-
-        return loss
-
-
-    def backward(self, loss=None):
-        metrics = {}
-        if loss is not None:
-            loss.backward()
-            if self.clip_grad_norm > 0:
-                norm_val = nn.utils.clip_grad_norm_(
-                    self.net.parameters(), self.clip_grad_norm
-                )
-
-                metrics['loss'] = loss.item()
-                metrics['grad_norm'] = norm_val.item()
-
-        self.optimizer.step()
-        # TODO: Add learning rate scheduler
-
-        self.optimizer.zero_grad()
-
-        return metrics
 
 
     def zero_grad(self, set_to_none=False):
