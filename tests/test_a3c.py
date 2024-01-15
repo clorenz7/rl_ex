@@ -72,7 +72,7 @@ def test_cart_pole_train_pt_rep():
         total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
         steps_per_batch=10000,
-        debug=False, serial=True, seed=543,
+        serial=True, seed=543,
         shared_mode=True, repro_mode=True
     )
 
@@ -110,7 +110,7 @@ def test_cart_pole_train_pt_rep_rmsprop():
             total_step_limit=1e9, episode_limit=2000, log_interval=100,
             solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
             steps_per_batch=10000,
-            debug=False, serial=False, seed=543,
+            serial=False, seed=543,
             shared_mode=True, repro_mode=True, use_lock=True
         )
         if not solved:
@@ -153,7 +153,7 @@ def test_cart_pole_train_batched():
         total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
         steps_per_batch=steps_per_batch, seed=seed,
-        debug=False, serial=True,
+        serial=True,
         shared_mode=True
     )
     assert solved
@@ -187,7 +187,7 @@ def test_cart_pole_train_arch():
         total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
         steps_per_batch=1250,
-        debug=False, serial=True, seed=543, shared_mode=True
+        serial=True, seed=543, shared_mode=True
     )
 
     assert solved
@@ -226,7 +226,7 @@ def test_cart_pole_train_multi():
         total_step_limit=1e9, episode_limit=2000, log_interval=100,
         solved_thresh=gym.make(env_name).spec.reward_threshold,
         steps_per_batch=steps_per_batch,
-        debug=False, seed=seed,
+        seed=seed,
         serial=True, shared_mode=True
     )
 
@@ -260,7 +260,7 @@ def test_cart_pole_train_a3c():
         n_workers, agent_params, train_params, env_name,
         log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
         solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
-        debug=False, use_mlflow=False, use_lock=True
+        use_mlflow=False, use_lock=True
     )
     assert solved
 
