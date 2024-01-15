@@ -76,7 +76,7 @@ Upon rendering the game, it was discovered that due to the deterministic nature 
 
 ![boring_pong](./assets/boring_A3C_Pong_epoch30.gif)
 
-This makes the games quite boring, so I re-introduced the reccommended random action probability of 25% to the environment which adds randomness to the state and an extra challenge for the agent. The same serve-shot-score loop can be observed a few times, but is quickly broken by the action randomness. One can also observe the agent randomly missing easy volleys, but also scoring in a variety of situations:
+This makes the games quite boring, so I re-introduced the reccommended random action probability of 25% to the environment which 25% of hte time ignores the agent's action in favor of their previous action. This breaks determinism and adds an extra challenge for the agent. The same serve-shot-score loop can be observed a few times, but is quickly broken by the action randomness. One can also observe the agent randomly missing easy volleys, but also scoring in a variety of situations:
 
 ![mid_training_pong](./assets/A3C_Pong_jan12_epoch12.gif)
 
