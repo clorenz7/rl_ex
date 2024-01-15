@@ -62,7 +62,7 @@ As can be seen in the GIF above, the game gets significantly more challenging wh
 
 ### Pong
 
-Below shows the heavily and less  smoothed training curves for Pong, which was solved in roughly 2 hours. The hyperparameters were the same as above, except 7 agent threads were used.
+Below shows the heavily and less smoothed training curves for Pong, which was solved in roughly 2 hours. The hyperparameters were the same as above, except 7 agent threads were used.
 
 ![smoothed_pong](./assets/pong_training_smooth.png)
 
@@ -79,5 +79,17 @@ Upon rendering the game, it was discovered that due to the deterministic nature 
 This makes the games quite boring, so I re-introduced the reccommended random action probability of 25% to the environment which adds randomness to the state and an extra challenge for the agent. The same serve-shot-score loop can be observed a few times, but is quickly broken by the action randomness. One can also observe the agent randomly missing easy volleys, but also scoring in a variety of situations:
 
 ![mid_training_pong](./assets/A3C_Pong_jan12_epoch12.gif)
+
+### Breakout
+
+Here is a result of training the algorithm on Breakout for 26 epochs, which achieves a score in the mid 400s, matching the hyperparameter tuning performance in the original paper.
+
+![mid_training_breakout](./assets/A3C_Breakout_jan14_2_epoch26.gif)
+
+The training curve does not exactly match the paper, and it can be seen that the training is unstable:
+
+![train_curve_breakout](./assets/breakout_training_curve_jan14.png)
+
+My hypotheses are that this could be caused by not enough gradient clipping, or the usage of momentum with Adam while the original paper used RMSprop with no momentum.
 
 
