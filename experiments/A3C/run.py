@@ -13,7 +13,9 @@ class ExperimentParams(dict):
     DEFAULT_AGENT = {}
     DEFAULT_TRAIN = {}
     DEFAULT_ENV = {}
-    DEFAULT_SIM = {}
+    DEFAULT_SIM = {
+        'experiment_name': datetime.datetime.now().strftime('%Y_%b_%d_%H_%M')
+    }
 
     def __init__(self, agent_params={}, train_params={},
                  env_params={}, simulation_params={}):
@@ -44,7 +46,6 @@ def main():
     # Get command line parameters and setup output directory
     cli_args = parser.parse_args()
     os.makedirs(cli_args.out_dir, exist_ok=True)
-    date_time = datetime.datetime.now().strftime('%Y_%b_%d_%H_%M')
 
     # Parse and prepare experiment parameters
     if cli_args.json:
@@ -52,35 +53,20 @@ def main():
             json_params = jstyleson.load(fp)
 
         base_name = os.path.basename(cli_args.json).rsplit(".", 1)[0]
+        sim_params = json_params.get('simulation_params', {})
+        if sim_params.get('run_name') is None:
+            sim_params['run_name'] = base_name
+            json_params['simmulatiion_params'] = sim_params
+
     else:
         json_params = {}
-        base_name = date_time
 
     experiment_params = ExperimentParams(**json_params)
 
-    if True:
-        a3c.train_loop_continuous(
-            out_dir=cli_args.out_dir,
-            **experiment_params
-        )
-    else:
-        # # TODO: Make this all just an unpacking of experiment params
-        n_workers = experiment_params['simulation_params'].pop('n_workers', 1)
-        exp_name = experiment_params['simulation_params'].get('experiment_name', '')
-        experiment_params['simulation_params']['experiment_name'] = exp_name or base_name
-        run_name = experiment_params['simulation_params'].get('run_name')
-        seed = experiment_params['simulation_params'].get('seed')
-        if run_name and seed and cli_args.json:
-            run_name = f"{base_name}_{seed}"
-
-        a3c.train_loop_continuous(
-            n_workers,
-            experiment_params['agent_params'],
-            experiment_params['train_params'],
-            experiment_params['env_params'],
-            **experiment_params['simulation_params'],
-            out_dir=cli_args.out_dir
-        )
+    a3c.train_loop_continuous(
+        out_dir=cli_args.out_dir,
+        **experiment_params
+    )
 
 
 if __name__ == '__main__':

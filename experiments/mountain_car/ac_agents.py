@@ -7,7 +7,8 @@ from torch import nn
 from torch.distributions import Categorical
 import torch.nn.functional as F
 
-from base import BaseAgent, net_from_layer_sizes
+from base import BaseAgent
+from cor_rl.factories import ffw_factory as net_from_layer_sizes
 
 
 class MountainCarActorCriticAgent(BaseAgent):
