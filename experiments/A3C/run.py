@@ -58,23 +58,29 @@ def main():
 
     experiment_params = ExperimentParams(**json_params)
 
-    # # TODO: Make this all just an unpacking of experiment params
-    n_workers = experiment_params['simulation_params'].pop('n_workers', 1)
-    exp_name = experiment_params['simulation_params'].get('experiment_name', '')
-    experiment_params['simulation_params']['experiment_name'] = exp_name or base_name
-    run_name = experiment_params['simulation_params'].get('run_name')
-    seed = experiment_params['simulation_params'].get('seed')
-    if run_name and seed and cli_args.json:
-        run_name = f"{base_name}_{seed}"
+    if True:
+        a3c.train_loop_continuous(
+            out_dir=cli_args.out_dir,
+            **experiment_params
+        )
+    else:
+        # # TODO: Make this all just an unpacking of experiment params
+        n_workers = experiment_params['simulation_params'].pop('n_workers', 1)
+        exp_name = experiment_params['simulation_params'].get('experiment_name', '')
+        experiment_params['simulation_params']['experiment_name'] = exp_name or base_name
+        run_name = experiment_params['simulation_params'].get('run_name')
+        seed = experiment_params['simulation_params'].get('seed')
+        if run_name and seed and cli_args.json:
+            run_name = f"{base_name}_{seed}"
 
-    a3c.train_loop_continuous(
-        n_workers,
-        experiment_params['agent_params'],
-        experiment_params['train_params'],
-        experiment_params['env_params'],
-        **experiment_params['simulation_params'],
-        out_dir=cli_args.out_dir
-    )
+        a3c.train_loop_continuous(
+            n_workers,
+            experiment_params['agent_params'],
+            experiment_params['train_params'],
+            experiment_params['env_params'],
+            **experiment_params['simulation_params'],
+            out_dir=cli_args.out_dir
+        )
 
 
 if __name__ == '__main__':

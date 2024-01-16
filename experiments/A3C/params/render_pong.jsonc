@@ -25,15 +25,19 @@
         // "load_file": "/Users/cory/rl_results/a3c_pong/A3C_Pong_epoch30.pt",
         // "save_gif": "/Users/cory/rl_results/a3c_pong/A3C_Pong_epoch30.gif",
         //
-        // Score 12
-        "seed": 101,
-        "load_file": "/Users/cory/rl_results/a3c_pong/A3C_Pong_jan12_epoch12.pt",
-        "save_gif": "/Users/cory/rl_results/a3c_pong/A3C_Pong_jan12_epoch12.gif",
+        // Score 12 (avg 11)
+        // "seed": 101,
+        // "load_file": "/Users/cory/rl_results/a3c_pong/A3C_Pong_jan12_epoch12.pt",
+        // "save_gif": "/Users/cory/rl_results/a3c_pong/A3C_Pong_jan12_epoch12.gif",
+        // Score 17 (avg 16)
+        "seed": 1012,
+        "load_file": "/Users/cory/rl_results/a3c_pong/A3C_Pong_jan12_epoch48.pt",
+        "save_gif": "/Users/cory/rl_results/a3c_pong/A3C_Pong_jan12_epoch48.gif",
         "n_workers": 1,
-        "log_interval": 1,
-        "episode_limit": 1,
-        "steps_per_batch": 5000000,
-        "avg_decay": 0.0,
+        "print_interval": 1,
+        "max_episodes": 1,
+        "max_steps_per_batch": 5000000,
+        "metric_decay": 0.0,
         "use_mlflow": false,
         "serial": true,
         "use_lock": false,

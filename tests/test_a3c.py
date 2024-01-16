@@ -23,27 +23,6 @@ def test_n_step_returns():
     assert n_step_returns == [12, 20, 32, 48, 64]
 
 
-# def test_cart_pole_eval():
-#     """
-#     Test that you can get a single update from an agent
-#     """
-#     render_mode = "human" if False else 'rgb_array'
-#     env = gym.make('CartPole-v1', render_mode=render_mode)
-#     agent_params = {
-#         'hidden_sizes': [128],
-#         'n_actions': 2,
-#         'n_state': 4
-#     }
-#     train_params = {
-#         'optimizer': 'rmsprop'
-#     }
-#     agent = a2c.AdvantageActorCriticAgent(agent_params, train_params)
-
-#     result = a3c.agent_env_task(agent, agent, agent.optimizer, env, state=None)
-#     # Just make sure that we can evaluate the agent and get state
-#     assert 'state' in result
-
-
 def test_cart_pole_train_pt_rep():
     """
     Test that cart pole can be solved similar to PyTorch reference
@@ -65,21 +44,32 @@ def test_cart_pole_train_pt_rep():
         'lr': 3e-2,  # A learning rate of 3e-3 is more stable...
         'weight_decay': 0.0,
     }
-
-    print("")
-    agent, solved = a3c.train_loop_continuous(
-        1, agent_params, train_params, 'CartPole-v1',
-        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+    worker_params = dict(
+        n_workers=1,
+        max_steps=1e9, max_episodes=2000, print_interval=100,
         solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-        steps_per_batch=10000,
+        max_steps_per_batch=10000,
         serial=True, seed=543,
         shared_mode=True, repro_mode=True
+    )
+
+    print("")
+    # agent, solved = a3c.train_loop_continuous(
+    #     1, agent_params, train_params, 'CartPole-v1',
+    #     max_steps=1e9, max_episodes=2000, print_interval=100,
+    #     solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+    #     max_steps_per_batch=10000,
+    #     serial=True, seed=543,
+    #     shared_mode=True, repro_mode=True
+    # )
+    agent, solved = a3c.train_loop_continuous(
+        agent_params, train_params, 'CartPole-v1', worker_params
     )
 
     assert solved
 
 
-def test_cart_pole_train_pt_rep_rmsprop():
+def test_cart_pole_train_rmsprop_pt_rep():
     """
     Test that cart pole can be solved similar to PyTorch reference
     implementation of A2C
@@ -101,17 +91,21 @@ def test_cart_pole_train_pt_rep_rmsprop():
         'weight_decay': 0.0,
     }
 
+    worker_params = dict(
+        n_workers=4,
+        max_steps=1e9, max_episodes=2000, print_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        max_steps_per_batch=10000,
+        serial=False, seed=543,
+        shared_mode=True, repro_mode=True, use_lock=True
+    )
+
     n_failed = 0
     n_runs = 1
     for i in range(n_runs):
         print("")
         agent, solved = a3c.train_loop_continuous(
-            4, agent_params, train_params, 'CartPole-v1',
-            total_step_limit=1e9, episode_limit=2000, log_interval=100,
-            solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-            steps_per_batch=10000,
-            serial=False, seed=543,
-            shared_mode=True, repro_mode=True, use_lock=True
+            agent_params, train_params, 'CartPole-v1', worker_params
         )
         if not solved:
             n_failed += 1
@@ -146,15 +140,18 @@ def test_cart_pole_train_batched():
         'weight_decay': 0.0,
     }
     steps_per_batch = 125
+    worker_params = dict(
+        n_workers=1,
+        max_steps=1e9, max_episodes=2000, print_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        max_steps_per_batch=steps_per_batch, seed=seed,
+        serial=True,
+        shared_mode=True
+    )
 
     print("")
     agent, solved = a3c.train_loop_continuous(
-        1, agent_params, train_params, 'CartPole-v1',
-        total_step_limit=1e9, episode_limit=2000, log_interval=100,
-        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-        steps_per_batch=steps_per_batch, seed=seed,
-        serial=True,
-        shared_mode=True
+        agent_params, train_params, 'CartPole-v1', worker_params
     )
     assert solved
 
@@ -181,13 +178,16 @@ def test_cart_pole_train_arch():
         'optimizer': 'adam',
         'lr': 1e-3 * 2,
     }
+    worker_params = dict(
+        n_workers=1,
+        max_steps=1e9, max_episodes=2000, print_interval=100,
+        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
+        max_steps_per_batch=1250,
+        serial=True, seed=543, shared_mode=True
+    )
     print("")
     agent, solved = a3c.train_loop_continuous(
-        1, agent_params, train_params, 'CartPole-v1',
-        total_step_limit=1e9, episode_limit=2000, log_interval=100,
-        solved_thresh=gym.make('CartPole-v1').spec.reward_threshold,
-        steps_per_batch=1250,
-        serial=True, seed=543, shared_mode=True
+        agent_params, train_params, 'CartPole-v1', worker_params
     )
 
     assert solved
@@ -215,19 +215,21 @@ def test_cart_pole_train_multi():
         'weight_decay': 0.0,
     }
 
-    n_threads = 16
+    # n_threads = 16
     env_name = 'CartPole-v1'
 
     steps_per_batch = 15 * 10
-
-    print("")
-    agent, solved = a3c.train_loop_continuous(
-        n_threads, agent_params, train_params, env_name,
-        total_step_limit=1e9, episode_limit=2000, log_interval=100,
+    worker_params = dict(
+        n_workers=16,
+        max_steps=1e9, max_episodes=2000, print_interval=100,
         solved_thresh=gym.make(env_name).spec.reward_threshold,
-        steps_per_batch=steps_per_batch,
+        max_steps_per_batch=steps_per_batch,
         seed=seed,
         serial=True, shared_mode=True
+    )
+    print("")
+    agent, solved = a3c.train_loop_continuous(
+        agent_params, train_params, env_name, worker_params
     )
 
     assert solved
@@ -253,14 +255,16 @@ def test_cart_pole_train_a3c():
     }
 
     env_name = 'CartPole-v1'
-    n_workers = 4
 
+    worker_params = dict(
+        n_workers=4,
+        print_interval=100, seed=543, max_steps=1e9, max_episodes=2000,
+        solved_thresh=450, max_steps_per_batch=10000, metric_decay=0.95,
+        use_mlflow=False, use_lock=True
+    )
     print("")  # For ease of reading
     agent, solved = a3c.train_loop_continuous(
-        n_workers, agent_params, train_params, env_name,
-        log_interval=100, seed=543, total_step_limit=1e9, episode_limit=2000,
-        solved_thresh=450, steps_per_batch=10000, avg_decay=0.95,
-        use_mlflow=False, use_lock=True
+        agent_params, train_params, env_name, worker_params
     )
     assert solved
 

@@ -314,15 +314,24 @@ def continuous_worker_thread(task_id, agent_params, train_params, env_params,
     return worker
 
 
-def train_loop_continuous(n_workers, agent_params, train_params, env_params,
-                          steps_per_batch=5, total_step_limit=10000,
-                          episode_limit=None, max_steps_per_episode=10000,
-                          solved_thresh=None, log_interval=1e9, seed=8888,
-                          avg_decay=0.95, out_dir=None, load_file=None,
-                          experiment_name=None, save_interval=None,
-                          use_mlflow=False, serial=False, shared_mode=True,
-                          render=False, use_lock=True, repro_mode=False,
-                          metric_log_interval=4, save_gif='', run_name=None):
+def train_loop_continuous(agent_params, train_params, env_params,
+                          worker_params={}):
+
+    print("")  # For Unit Tests
+    n_workers = worker_params.get('n_workers', 1)
+    out_dir = worker_params.get('out_dir')
+    max_steps_per_episode = worker_params.get('max_steps_per_episode') or 10000
+    seed = worker_params.get('seed', 8888)
+    shared_mode = worker_params.get('shared_mode', True)
+    load_file = worker_params.get('load_file')
+    repro_mode = worker_params.get('repro_mode', False)
+    run_name = worker_params.get('run_name')
+
+    experiment_name = worker_params.get('experiment_name')
+    if not experiment_name:
+        now = datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
+        experiment_name = now
+        worker_params['experiment_name'] = now
 
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
@@ -346,7 +355,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
     if shared_mode:
         global_agent.share_memory()
 
-    lock = mp.Lock() if use_lock else None
+    lock = mp.Lock() if worker_params.get('use_lock') else None
 
     info_fields = [
         'total_steps', 'total_episodes', 'avg_score', 'avg_loss', 'solved',
@@ -357,51 +366,43 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
     if repro_mode:
         shared_info['avg_score'] += 10.0
 
-    experiment_name = experiment_name or datetime.datetime.now().strftime("%Y_%b_%d_H%H_%M")
     mlflow_run_id = None
-    if use_mlflow:
+    if worker_params.get('use_mlflow', False):
         mlflow.set_experiment(experiment_name)
         active_run = mlflow.start_run(run_name=run_name)
         mlflow.log_param('n_workers', n_workers)
         mlflow_run_id = active_run.info.run_id
+        worker_params['mlflow_run_id'] = mlflow_run_id
         if not run_name:
             run_name = active_run.info.run_name
-
-    worker_params = {
-        'experiment_name': experiment_name,
-        'mlflow_run_id': mlflow_run_id,
-        'solved_thresh': solved_thresh,
-        'max_steps_per_batch': steps_per_batch,
-        'max_steps_per_episode': max_steps_per_episode,
-        'max_steps': total_step_limit,
-        'max_episodes': episode_limit,
-        'metric_decay': avg_decay,
-        'print_interval': log_interval,
-        'epoch_save_interval': save_interval,
-        'out_dir': out_dir,
-        'metric_log_interval': metric_log_interval,
-        'save_frames': bool(save_gif),
-        'run_name': run_name,
-    }
 
     worker_args = [
         agent_params, train_params, env_params,
         global_agent, shared_info, worker_params
     ]
 
-    if serial:
+    if worker_params.get('serial', False):
         if n_workers == 1:
-            worker = continuous_worker_thread(0, *worker_args, lock=None, render=render)
+            save_gif = worker_params.get('save_gif')
+            worker_params['save_frames'] = worker_params.get('save_frames') or bool(save_gif)
+            worker = continuous_worker_thread(
+                0, *worker_args, lock=None,
+                render=worker_params.get('render')
+            )
             if save_gif:
                 utils.write_gif(worker.frames, save_gif, fps=30)
 
         else:
             worker_params['single_batch'] = True
             worker_params['mlflow_run_id'] = None
+            max_steps = worker_params.get('max_steps', 10000)
+            max_episodes = worker_params.get('max_episodes')
             # Initialize the workers
             workers = []
             for i in range(n_workers):
-                worker = continuous_worker_thread(i, *worker_args, lock=lock, setup_only=True)
+                worker = continuous_worker_thread(
+                    i, *worker_args, lock=lock, setup_only=True
+                )
                 workers.append(worker)
 
             # Set seed to have same action selection in serial (debugging) mode
@@ -416,8 +417,8 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
                     )
                     keep_training = (
                         shared_info['solved'] == 0 and
-                        shared_info['total_steps'] < total_step_limit and
-                        shared_info['total_episodes'] < episode_limit
+                        shared_info['total_steps'] < max_steps and
+                        shared_info['total_episodes'] < max_episodes
                     )
                     if not keep_training:
                         break
@@ -432,7 +433,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
             worker_process.start()
             processes.append(worker_process)
 
-        if save_interval is None:
+        if worker_params.get('epoch_save_interval') is None:
             print("Will not be saving agent checkpoints!")
         else:
             # A thread that saves every epoch interval
@@ -450,7 +451,7 @@ def train_loop_continuous(n_workers, agent_params, train_params, env_params,
         except KeyboardInterrupt:
             import ipdb; ipdb.set_trace()
         finally:
-            if use_mlflow:
+            if worker_params.get('use_mlflow', False):
                 mlflow.end_run()
 
     solved = shared_info['solved'].item() > 0
