@@ -315,11 +315,11 @@ def continuous_worker_thread(task_id, agent_params, train_params, env_params,
 
 
 def train_loop_continuous(agent_params, train_params, env_params,
-                          worker_params={}):
+                          simulation_params={}, out_dir=None):
 
     print("")  # For Unit Tests
+    worker_params = dict(simulation_params)
     n_workers = worker_params.get('n_workers', 1)
-    out_dir = worker_params.get('out_dir')
     max_steps_per_episode = worker_params.get('max_steps_per_episode') or 10000
     seed = worker_params.get('seed', 8888)
     shared_mode = worker_params.get('shared_mode', True)
