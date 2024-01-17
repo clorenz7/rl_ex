@@ -192,7 +192,6 @@ class AdvantageActorCriticAgent(BaseAgent):
         loss = self.calculate_loss(results)
         loss.backward()
 
-        # if self.clip_grad_norm > 0:
         norm_val = nn.utils.clip_grad_norm_(
             self.net.parameters(), self.clip_grad_norm or 1e9
         )
