@@ -136,3 +136,12 @@ class SharedRMSprop(optim.RMSprop):
                     p.data.addcdiv_(grad, denom, value=-step_size)
 
         return loss
+
+
+    def print_states(self, write_func=print):
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                state = self.state[p]
+                write_func(repr(state['exp_avg_sq']))

@@ -33,7 +33,8 @@ class AtariEnvWrapper:
     """
 
     def __init__(self, game_name, n_stack=4, n_repeat=4, reward_clip=None,
-                 trim_x=0, noop_max=30, lost_life_ends_ep=False, **kwargs):
+                 trim_x=0, noop_max=30, lost_life_ends_ep=False, n_recurrent_state=0,
+                 **kwargs):
         self.env = gym.make(game_name, obs_type='rgb', frameskip=1, **kwargs)
         self.n_repeat = n_repeat
         self.n_stack = n_stack
@@ -44,6 +45,7 @@ class AtariEnvWrapper:
         self.noop_max = noop_max
         self.lost_life_ends_ep = lost_life_ends_ep
         self.raw_frame_buffer = []
+        self.n_recurrent_state = n_recurrent_state
 
     def reload_frame_buffer(self, frame_0=None, frame_1=None):
         if frame_0 is None:
@@ -82,10 +84,16 @@ class AtariEnvWrapper:
         if terminated or lost_a_life:
             frames = None
         else:
-            frame = preprocess_frames(
-                self.raw_frame_buffer[-1], self.raw_frame_buffer[-2],
-                trim_x=self.trim_x
-            )
+            if self.n_repeat == 1:
+                frame = preprocess_frames(
+                    self.raw_frame_buffer[-1], self.raw_frame_buffer[-1],
+                    trim_x=self.trim_x
+                )
+            else:
+                frame = preprocess_frames(
+                    self.raw_frame_buffer[-1], self.raw_frame_buffer[-2],
+                    trim_x=self.trim_x
+                )
             self.frame_buffer.append(frame)
             self.frame_buffer = self.frame_buffer[-self.n_stack:]
 
@@ -93,7 +101,12 @@ class AtariEnvWrapper:
 
         total_reward = sum(reward_buffer)
 
-        return frames, total_reward, terminated, trunc, info
+        if self.n_recurrent_state:
+            state = [frames, self.recurrent_state]
+        else:
+            state = frames
+
+        return state, total_reward, terminated, trunc, info
 
     def render(self):
         if self.raw_frame_buffer:
@@ -110,13 +123,18 @@ class AtariEnvWrapper:
         frame, info = self.env.reset(seed=seed)
         self.reload_frame_buffer(frame_0=frame)
         self.num_lives = info.get('lives', 0)
+        if self.n_recurrent_state:
+            self.recurrent_state = (
+                torch.zeros(self.n_recurrent_state),
+                torch.zeros(self.n_recurrent_state)
+            )
 
         n_no_ops = self.env.np_random.integers(1, self.noop_max+1)
 
         for _ in range(n_no_ops):
-            frames, total_reward, terminated, trunc, info = self.step(NO_OP)
+            state, total_reward, terminated, trunc, info = self.step(NO_OP)
 
-        return frames, info
+        return state, info
 
     @property
     def action_space(self):

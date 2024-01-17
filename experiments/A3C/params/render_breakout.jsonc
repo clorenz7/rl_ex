@@ -16,10 +16,13 @@
         "repeat_action_probability": 0.0
     },
     "simulation_params": {
-        // Score 427
-        "seed": 101,
-        "load_file": "/Users/cory/rl_results/a3c_breakout/A3C_Breakout_jan14_2_epoch26.pt",
-        "save_gif": "/Users/cory/rl_results/a3c_breakout/A3C_Breakout_jan14_2_epoch26.gif",
+        // // Score 427
+        // "seed": 101,
+        // "load_file": "/Users/cory/rl_results/a3c_breakout/A3C_Breakout_jan14_2_epoch26.pt",
+        // "save_gif": "/Users/cory/rl_results/a3c_breakout/A3C_Breakout_jan14_2_epoch26.gif",
+        "seed": 10101,
+        "load_file": "/Users/cory/rl_results/A3C_Breakout_jan16_3_epoch26.pt",
+        "save_gif": "/Users/cory/rl_results/a3c_breakout/A3C_Breakout_jan16_3_epoch26.gif",
         "n_workers": 1,
         "print_interval": 1,
         "max_episodes": 1,

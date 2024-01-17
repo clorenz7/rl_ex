@@ -38,9 +38,11 @@ def interact(env, agent, t_max=5, state=None, output_frames=False, lock=None):
 
     while t < t_max and not terminated:
         # Run network
-        action_idx, value_est, entropy, log_prob = agent.select_action(
+        action_idx, value_est, entropy, log_prob, r_state = agent.select_action(
             state, lock=lock
         )
+        if r_state is not None:
+            env.recurrent_state = r_state
         state, reward, terminated, _, _ = env.step(action_idx)
 
         results.rewards.append(reward)
@@ -59,7 +61,7 @@ def interact(env, agent, t_max=5, state=None, output_frames=False, lock=None):
     else:
         # Get an estimate of the value of the final state
         with torch.no_grad():
-            action_idx, value_est, _, _ = agent.select_action(state, lock=lock)
+            action_idx, value_est, _, _, _ = agent.select_action(state, lock=lock)
         value_est = value_est.item()
 
     results.values.append(value_est)
@@ -106,6 +108,7 @@ class Worker:
 
         self.frames = []
         self.reset_metrics()
+        self.start_time = None
 
     def save_on_interval(self, shared_info, worker_params={}):
         save_interval = worker_params.get('epoch_save_interval', 2)
@@ -171,7 +174,8 @@ class Worker:
                 params['seed'] = self.seed
                 mlflow.log_params(params)
 
-        self.start_time = time.time()
+        if self.start_time is None:
+            self.start_time = time.time()
 
     def teardown_logging(self):
         pass
@@ -235,10 +239,15 @@ class Worker:
             self.state = state
             loss, norm_val = self.agent.calc_loss_and_backprop(results)
             if shared_info['solved'].item() == 0:
+                # with open(f"worker_{self.task_id}.log", 'a') as fp:
                 with self.lock:
+                    # fp.write(f"Time {time.time()} Before: ")
+                    # self.shared_opt.print_states(fp.write)
                     self.shared_opt.zero_grad(set_to_none=True)
                     self.agent.sync_grads(self.shared_agent)
                     self.shared_opt.step()
+                    # fp.write(f"Time {time.time()} After: ")
+                    # self.shared_opt.print_states(fp.write)
             else:
                 break
 
@@ -319,6 +328,7 @@ def train_loop_continuous(agent_params, train_params, env_params,
 
     print("")  # For Unit Tests
     worker_params = dict(simulation_params)
+    worker_params['out_dir'] = out_dir
     n_workers = worker_params.get('n_workers', 1)
     max_steps_per_episode = worker_params.get('max_steps_per_episode') or 10000
     seed = worker_params.get('seed', 8888)
@@ -354,6 +364,7 @@ def train_loop_continuous(agent_params, train_params, env_params,
     global_agent.zero_grad()
     if shared_mode:
         global_agent.share_memory()
+        global_agent.optimizer.share_memory()
 
     lock = mp.Lock() if worker_params.get('use_lock') else None
 

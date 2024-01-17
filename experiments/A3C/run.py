@@ -56,7 +56,7 @@ def main():
         sim_params = json_params.get('simulation_params', {})
         if sim_params.get('run_name') is None:
             sim_params['run_name'] = base_name
-            json_params['simmulatiion_params'] = sim_params
+            json_params['simulation_params'] = sim_params
 
     else:
         json_params = {}

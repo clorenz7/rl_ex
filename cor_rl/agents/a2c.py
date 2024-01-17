@@ -54,7 +54,7 @@ class PolicyValueNetwork(nn.Module):
 
         value_est = self.value_head(x)
 
-        return action_probs, value_est
+        return action_probs, value_est, None
 
 
 class AdvantageActorCriticAgent(BaseAgent):
@@ -91,17 +91,17 @@ class AdvantageActorCriticAgent(BaseAgent):
             features = self.state_to_features(state)
 
         if lock is None:
-            policy, value_est = self.net(features)
+            policy, value_est, r_state = self.net(features)
         else:
             with lock:
-                policy, value_est = self.net(features)
+                policy, value_est, r_state = self.net(features)
 
         pdf = Categorical(policy)
         action = pdf.sample()
         log_prob = pdf.log_prob(action)
         entropy = pdf.entropy()
 
-        return action.item(), value_est, entropy, log_prob
+        return action.item(), value_est, entropy, log_prob, r_state
 
     def construct_net(self):
         return PolicyValueNetwork(

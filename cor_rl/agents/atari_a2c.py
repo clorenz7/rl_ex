@@ -3,7 +3,7 @@ from .a2c import AdvantageActorCriticAgent
 
 
 class Mnih2015PolicyValueNetwork(nn.Module):
-    def __init__(self, n_actions, n_channels=4):
+    def __init__(self, n_actions, n_channels=4, n_hidden=256):
         super().__init__()
         # Image size: 84 x 84 x n_channels
         n_filters_1 = 16
@@ -15,7 +15,6 @@ class Mnih2015PolicyValueNetwork(nn.Module):
         stride_2 = 2
 
         n_features = 9 * 9 * n_filters_2
-        n_hidden = 256
 
         self.base_net = nn.Sequential(
             nn.Conv2d(n_channels, n_filters_1, filter_size_1, stride_1),
@@ -41,13 +40,42 @@ class Mnih2015PolicyValueNetwork(nn.Module):
         action_probs = self.policy_head(x)
         value_est = self.value_head(x)
 
-        return action_probs, value_est
+        return action_probs, value_est, None
+
+
+class Mnih2016PolicyValueLSTMNetwork(Mnih2015PolicyValueNetwork):
+    def __init__(self, n_actions, n_channels=4, n_hidden=256):
+        super().__init__(n_actions, n_channels, n_hidden)
+
+        self.lstm = nn.LSTMCell(n_hidden, n_hidden)
+
+    def forward(self, state):
+        x, recurrent_state = state
+        x = self.base_net(x)
+        new_recurrent_state = self.lstm(x, recurrent_state)
+
+        x = new_recurrent_state[0]
+        action_probs = self.policy_head(x)
+        value_est = self.value_head(x)
+
+        return action_probs, value_est, new_recurrent_state
 
 
 class Mnih2016A2CAgent(AdvantageActorCriticAgent):
 
     def construct_net(self):
         return Mnih2015PolicyValueNetwork(self.n_actions)
+
+    def normalize_state(self, state):
+        return state
+
+
+class Mnih2016LSTMA2CAgent(AdvantageActorCriticAgent):
+
+    n_channels = 4
+
+    def construct_net(self):
+        return Mnih2016PolicyValueLSTMNetwork(self.n_actions, self.n_channels)
 
     def normalize_state(self, state):
         return state
