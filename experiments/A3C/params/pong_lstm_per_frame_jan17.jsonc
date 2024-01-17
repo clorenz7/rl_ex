@@ -1,23 +1,25 @@
 {
     "agent_params": {
-        "n_actions": 4,
+        "n_actions": 6,
         "gamma": 0.99,
         "entropy_weight": 0.01,
-        "clip_grad_norm": 15.0,
-        "type": "a2c-atari",
-        "reward_clip": 1.0,
-        "value_loss_factor": 0.9
+        "clip_grad_norm": 40.0,
+        "type": "a2c-lstm",
+        "reward_clip": 1.0
     },
     "train_params": {
-        "optimizer": "rmsprop",
-        "lr": 1e-3
+        "optimizer": "adam",
+        "lr": 1e-4
     },
     "env_params": {
-        "env_name": "ALE/Breakout-v5",
-        "repeat_action_probability": 0.0
+        "repeat_action_probability": 0.0,
+        "n_recurrent_state": 256,
+        "n_stack": 1,
+        "n_repeat": 1,
+        "env_name": "ALE/Pong-v5"
     },
     "simulation_params": {
-        "seed": 88881012,
+        "seed": 88882,
         "n_workers": 6,
         "print_interval": 200,
         "total_step_limit": 50e6,
@@ -26,7 +28,7 @@
         "use_mlflow": true,
         "epoch_save_interval": 2,
         "use_lock": true,
-        "experiment_name": "A3C_Breakout",
-        "run_name": "jan17_3"
+        "experiment_name": "A3C_Pong",
+        "run_name": "lstm_jan17"
     }
 }

@@ -183,8 +183,9 @@ class AdvantageActorCriticAgent(BaseAgent):
     def sync_grads(self, other_net):
 
         for self_p, other_p in zip(self.net.parameters(), other_net.parameters()):
-            if other_p.grad is None:
-                other_p._grad = self_p.grad
+            if other_p.grad is not None:
+                return
+            other_p._grad = self_p.grad
 
     def calc_loss_and_backprop(self, results: InteractionResult):
         # Compute the loss
