@@ -13,7 +13,7 @@
     },
     "env_params": {
         "repeat_action_probability": 0.0,
-        "n_recurrent_state": 256,
+        "n_recurrent_states": 256,
         "n_stack": 1,
         "n_repeat": 1,
         "env_name": "ALE/Pong-v5"

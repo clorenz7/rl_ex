@@ -78,13 +78,17 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.reset()
 
     def params(self):
-        return {
+
+        params = {
             'clip_grad_norm': self.clip_grad_norm,
             'reward_clip': self.reward_clip,
             'lr': self.optimizer.param_groups[0]['lr'],
             'optimizer': self.optimizer_name,
             'value_loss_factor': self.value_loss_factor,
         }
+        params.update(self.train_params)
+
+        return params
 
     def select_action(self, state=None, lock=None):
         if state is not None:

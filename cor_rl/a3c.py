@@ -20,6 +20,16 @@ MLFLOW_URI = "http://127.0.0.1:8888"
 mlflow.set_tracking_uri(uri=MLFLOW_URI)
 
 
+def detach_state(state):
+    if isinstance(state, (list, tuple)):
+        state = [
+            state[0],
+            [s.detach() for s in state[1]]
+        ]
+
+    return state
+
+
 def interact(env, agent, t_max=5, state=None, output_frames=False, lock=None):
     """
     Does t_max steps of the agent in the environment.
@@ -60,6 +70,7 @@ def interact(env, agent, t_max=5, state=None, output_frames=False, lock=None):
         state = None
     else:
         # Get an estimate of the value of the final state
+        state = detach_state(state)
         with torch.no_grad():
             action_idx, value_est, _, _, _ = agent.select_action(state, lock=lock)
         value_est = value_est.item()
@@ -407,7 +418,7 @@ def train_loop_continuous(agent_params, train_params, env_params,
             worker_params['single_batch'] = True
             worker_params['mlflow_run_id'] = None
             max_steps = worker_params.get('max_steps', 10000)
-            max_episodes = worker_params.get('max_episodes')
+            max_episodes = worker_params.get('max_episodes') or 1e9
             # Initialize the workers
             workers = []
             for i in range(n_workers):

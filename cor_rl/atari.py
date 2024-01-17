@@ -33,7 +33,7 @@ class AtariEnvWrapper:
     """
 
     def __init__(self, game_name, n_stack=4, n_repeat=4, reward_clip=None,
-                 trim_x=0, noop_max=30, lost_life_ends_ep=False, n_recurrent_state=0,
+                 trim_x=0, noop_max=30, lost_life_ends_ep=False, n_recurrent_states=0,
                  **kwargs):
         self.env = gym.make(game_name, obs_type='rgb', frameskip=1, **kwargs)
         self.n_repeat = n_repeat
@@ -45,7 +45,7 @@ class AtariEnvWrapper:
         self.noop_max = noop_max
         self.lost_life_ends_ep = lost_life_ends_ep
         self.raw_frame_buffer = []
-        self.n_recurrent_state = n_recurrent_state
+        self.n_recurrent_states = n_recurrent_states
 
     def reload_frame_buffer(self, frame_0=None, frame_1=None):
         if frame_0 is None:
@@ -101,7 +101,7 @@ class AtariEnvWrapper:
 
         total_reward = sum(reward_buffer)
 
-        if self.n_recurrent_state:
+        if self.n_recurrent_states:
             state = [frames, self.recurrent_state]
         else:
             state = frames
@@ -123,10 +123,10 @@ class AtariEnvWrapper:
         frame, info = self.env.reset(seed=seed)
         self.reload_frame_buffer(frame_0=frame)
         self.num_lives = info.get('lives', 0)
-        if self.n_recurrent_state:
+        if self.n_recurrent_states:
             self.recurrent_state = (
-                torch.zeros(self.n_recurrent_state),
-                torch.zeros(self.n_recurrent_state)
+                torch.zeros(self.n_recurrent_states),
+                torch.zeros(self.n_recurrent_states)
             )
 
         n_no_ops = self.env.np_random.integers(1, self.noop_max+1)
@@ -135,6 +135,13 @@ class AtariEnvWrapper:
             state, total_reward, terminated, trunc, info = self.step(NO_OP)
 
         return state, info
+
+    def detach(self):
+        if self.n_recurrent_states:
+            self.recurrent_state = (
+                self.recurrent_state[0].detach(),
+                self.recurrent_state[1].detach(),
+            )
 
     @property
     def action_space(self):
