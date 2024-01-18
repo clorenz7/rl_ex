@@ -74,6 +74,7 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.n_exp_steps = self.agent_params.get('n_exp_steps', None)
         self.max_entropy = np.log2(self.n_actions)
         self.value_loss_factor = self.agent_params.get('value_loss_factor', 1.0)
+        self.n_channels = self.agent_params.get('n_channels', 4)
 
         self.reset()
 
