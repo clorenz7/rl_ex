@@ -231,6 +231,7 @@ class Worker:
         max_episodes = worker_params.get('max_episodes') or 1e9
         save_frames = worker_params.get('save_frames', False)
         single_batch = worker_params.get('single_batch', False)
+        self.steps_per_epoch = worker_params.get('steps_per_epoch', 1e6)
 
         if not single_batch:
             self.reset_metrics()

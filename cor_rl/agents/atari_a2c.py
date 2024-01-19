@@ -49,6 +49,7 @@ class KostikovPVLSTMNetwork(nn.Module):
     """
 
     def __init__(self, n_actions, n_channels=1, n_recurrent=256):
+        super().__init__()
         # Image size: 84 x 84 x n_channels
         stride = 2
         n_filters = 32
@@ -59,16 +60,16 @@ class KostikovPVLSTMNetwork(nn.Module):
             # Added this extra layer to take 84 x 84 down to 42x42.
             nn.Conv2d(n_channels, n_filters, kernel_size, stride, padding=1),
             nn.ELU(),
-            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),  # 21 x 21
             nn.ELU(),
-            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),  # 11 x 11
             nn.ELU(),
-            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),  # 6 x 6
             nn.ELU(),
-            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),  # 3 x 3
             nn.ELU(),
-            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
-            nn.ELU(),
+            # nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            # nn.ELU(),
             nn.Flatten(start_dim=0),
         )
 
@@ -122,3 +123,8 @@ class Mnih2016LSTMA2CAgent(AdvantageActorCriticAgent):
 
     def construct_net(self):
         return Mnih2016PolicyValueLSTMNetwork(self.n_actions, self.n_channels)
+
+
+class KostikovLSTMA2CAgent(AdvantageActorCriticAgent):
+    def construct_net(self):
+        return KostikovPVLSTMNetwork(self.n_actions, self.n_channels)

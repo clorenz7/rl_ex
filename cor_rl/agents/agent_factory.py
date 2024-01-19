@@ -15,6 +15,7 @@ class AgentFactory:
         'a2c-ffw': a2c.AdvantageActorCriticAgent,
         'a2c-atari': atari_a2c.Mnih2016A2CAgent,
         'a2c-lstm': atari_a2c.Mnih2016LSTMA2CAgent,
+        'a2c-lstmk': atari_a2c.KostikovLSTMA2CAgent,
         'repeater': RepeatAgent,
     }
 
