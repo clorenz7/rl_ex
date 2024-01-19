@@ -43,6 +43,55 @@ class Mnih2015PolicyValueNetwork(nn.Module):
         return action_probs, value_est, None
 
 
+class KostikovPVLSTMNetwork(nn.Module):
+    """
+    Based on https://github.com/ikostrikov/pytorch-a3c/blob/master/model.py
+    """
+
+    def __init__(self, n_actions, n_channels=1, n_recurrent=256):
+        # Image size: 84 x 84 x n_channels
+        stride = 2
+        n_filters = 32
+        kernel_size = 3
+        n_flattened = 3 * 3 * 32
+
+        self.base_net = nn.Sequential(
+            # Added this extra layer to take 84 x 84 down to 42x42.
+            nn.Conv2d(n_channels, n_filters, kernel_size, stride, padding=1),
+            nn.ELU(),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.ELU(),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.ELU(),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.ELU(),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.ELU(),
+            nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
+            nn.ELU(),
+            nn.Flatten(start_dim=0),
+        )
+
+        self.lstm = nn.LSTMCell(n_flattened, n_recurrent)
+
+        self.policy_head = nn.Sequential(
+            nn.Linear(n_recurrent, n_actions),
+            nn.Softmax(dim=-1)
+        )
+        self.value_head = nn.Linear(n_recurrent, 1)
+
+    def forward(self, state):
+        x, recurrent_state = state
+        x = self.base_net(x)
+        new_recurrent_state = self.lstm(x, recurrent_state)
+
+        x = new_recurrent_state[0]
+        action_probs = self.policy_head(x)
+        value_est = self.value_head(x)
+
+        return action_probs, value_est, new_recurrent_state
+
+
 class Mnih2016PolicyValueLSTMNetwork(Mnih2015PolicyValueNetwork):
     def __init__(self, n_actions, n_channels=4, n_hidden=256):
         super().__init__(n_actions, n_channels, n_hidden)
@@ -66,8 +115,6 @@ class Mnih2016A2CAgent(AdvantageActorCriticAgent):
     def construct_net(self):
         return Mnih2015PolicyValueNetwork(self.n_actions)
 
-    def normalize_state(self, state):
-        return state
 
 
 class Mnih2016LSTMA2CAgent(AdvantageActorCriticAgent):
@@ -77,6 +124,6 @@ class Mnih2016LSTMA2CAgent(AdvantageActorCriticAgent):
     def construct_net(self):
         return Mnih2016PolicyValueLSTMNetwork(self.n_actions, self.n_channels)
 
-    def normalize_state(self, state):
-        return state
+    # def normalize_state(self, state):
+    #     return state
 
