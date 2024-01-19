@@ -116,14 +116,9 @@ class Mnih2016A2CAgent(AdvantageActorCriticAgent):
         return Mnih2015PolicyValueNetwork(self.n_actions)
 
 
-
 class Mnih2016LSTMA2CAgent(AdvantageActorCriticAgent):
 
     n_channels = 4
 
     def construct_net(self):
         return Mnih2016PolicyValueLSTMNetwork(self.n_actions, self.n_channels)
-
-    # def normalize_state(self, state):
-    #     return state
-
