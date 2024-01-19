@@ -1,5 +1,6 @@
 from collections import namedtuple
 
+import joblib
 import numpy as np
 import torch
 from torch import nn
@@ -76,6 +77,13 @@ class AdvantageActorCriticAgent(BaseAgent):
         self.value_loss_factor = self.agent_params.get('value_loss_factor', 1.0)
         self.n_channels = self.agent_params.get('n_channels', 4)
 
+        self.normalizer = self.agent_params.get('normalizer', '').lower() or 'none'
+
+        self.obs_mean = 0
+        self.obs_std = 0
+        self.obs_count = 0
+        self.alpha = 0.999
+
         self.reset()
 
     def params(self):
@@ -90,6 +98,23 @@ class AdvantageActorCriticAgent(BaseAgent):
         params.update(self.train_params)
 
         return params
+
+    def normalize_state(self, state):
+        if self.normalizer == 'none':
+            return state
+        elif self.normalizer == 'exp_avg':
+            obs = state[0]
+            self.obs_mean = self.alpha * self.obs_mean + (1 - self.alpha) * obs.mean()
+            self.obs_std = self.alpha * self.obs_std + (1 - self.alpha) * obs.std()
+            self.obs_count += 1
+
+            unbiased_mu = self.obs_mean / (1 - pow(self.alpha, self.obs_count))
+            unbiased_std = self.obs_std / (1 - pow(self.alpha, self.obs_count))
+            obs = (obs - unbiased_mu) / (unbiased_std + 1e-8)
+            state[0] = obs
+            return state
+        else:
+            return super().normalize_state(state)
 
     def select_action(self, state=None, lock=None):
         if state is not None:
@@ -122,9 +147,18 @@ class AdvantageActorCriticAgent(BaseAgent):
 
     def checkpoint(self, file_name):
         torch.save(self.net, file_name)
+        if self.obs_count > 0:
+            joblib.dump(
+                (self.obs_mean, self.obs_std, self.obs_count),
+                file_name + ".norm"
+            )
 
     def load(self, file_name: str):
         self.net = torch.load(file_name).to(self.device)
+        if self.normalizer == 'exp_avg':
+            norm_data = joblib.load(file_name + ".norm")
+            self.obs_mean, self.obs_std, self.obs_count = norm_data
+
 
     def calculate_loss(self, results):
         n_step_returns = calc_n_step_returns(
@@ -189,7 +223,9 @@ class AdvantageActorCriticAgent(BaseAgent):
 
         for self_p, other_p in zip(self.net.parameters(), other_net.parameters()):
             if other_p.grad is not None:
-                return
+                print("Other grad is not none! Aborting Grad Sync!")
+                # return
+                continue
             other_p._grad = self_p.grad
 
     def calc_loss_and_backprop(self, results: InteractionResult):

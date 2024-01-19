@@ -412,7 +412,8 @@ def train_loop_continuous(agent_params, train_params, env_params,
                 render=worker_params.get('render')
             )
             if save_gif:
-                utils.write_gif(worker.frames, save_gif, fps=30)
+                fps = 140.0 / env_params.get('n_repeat', 4)
+                utils.write_gif(worker.frames, save_gif, fps=fps)
 
         else:
             worker_params['single_batch'] = True

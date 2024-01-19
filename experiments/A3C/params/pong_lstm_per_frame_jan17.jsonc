@@ -5,7 +5,8 @@
         "entropy_weight": 0.01,
         "clip_grad_norm": 40.0,
         "type": "a2c-lstm",
-        "reward_clip": 1.0
+        "reward_clip": 1.0,
+        "n_channels": 1
     },
     "train_params": {
         "optimizer": "adam",
@@ -21,6 +22,8 @@
     "simulation_params": {
         "seed": 88882,
         "n_workers": 6,
+        // "n_workers": 1,
+        // "serial": true,
         "print_interval": 200,
         "total_step_limit": 50e6,
         "max_steps_per_batch": 5,
@@ -29,6 +32,6 @@
         "epoch_save_interval": 2,
         "use_lock": true,
         "experiment_name": "A3C_Pong",
-        "run_name": "lstm_jan17"
+        "run_name": "lstm_1frame_jan17"
     }
 }
