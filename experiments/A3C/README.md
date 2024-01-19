@@ -93,3 +93,17 @@ The training curve does not exactly match the paper, and it can be seen that the
 My hypotheses are that this could be caused by not enough gradient clipping, or the usage of momentum with Adam while the original paper used RMSprop with no momentum.
 
 
+## Milestone #4: Using an LSTM
+
+### Pong
+
+Below shows the LSTM playing Pong. This agent takes an action on every frame. Like the frame buffer model, it also tends to get stuck in a serve-return-score loop.
+
+![lstm_pong](./assets/A3C_Pong_lstm_1frame_jan18_epoch36.gif)
+
+Since it is not forced to repeat actions, this agent is a little smoother compared to the frame buffer agent. Here is the training curve. It is a bit slower since it is a larger model and it is making 4 times as many action decisions. It also appears to have maxed out at a score of around 17.
+
+![lstm_training](./assets/lstm_pong_training_curve.png)
+
+
+
