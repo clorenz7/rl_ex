@@ -68,8 +68,6 @@ class KostikovPVLSTMNetwork(nn.Module):
             nn.ELU(),
             nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),  # 3 x 3
             nn.ELU(),
-            # nn.Conv2d(n_filters, n_filters, kernel_size, stride, padding=1),
-            # nn.ELU(),
             nn.Flatten(start_dim=0),
         )
 
