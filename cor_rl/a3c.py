@@ -91,6 +91,7 @@ class Worker:
         self.steps_per_epoch = steps_per_epoch
         agent_params = dict(agent_params)
         env_params = dict(env_params)
+        self.train_params = train_params
         if eval_mode:
             # Turn off reward clipping
             env_params.pop('reward_clip', None)
@@ -132,6 +133,7 @@ class Worker:
         stay_alive = True
         last_save = 0
         timeout = worker_params.get('timeout', 3600 * 24 * 10)
+        self.steps_per_epoch = worker_params.get('steps_per_epoch', 1e6)
 
         while stay_alive:
             self.start_time = time.time()
@@ -231,6 +233,7 @@ class Worker:
         max_episodes = worker_params.get('max_episodes') or 1e9
         save_frames = worker_params.get('save_frames', False)
         single_batch = worker_params.get('single_batch', False)
+        gif_frame_rate = worker_params.get('gif_frame_rate', 1)
         self.steps_per_epoch = worker_params.get('steps_per_epoch', 1e6)
 
         if not single_batch:
@@ -247,7 +250,7 @@ class Worker:
                 state=self.state, output_frames=save_frames,
             )
             if save_frames:
-                self.frames.extend(frames)
+                self.frames.extend(frames[::gif_frame_rate])
             self.state = state
             loss, norm_val = self.agent.calc_loss_and_backprop(results)
             if shared_info['solved'].item() == 0:
@@ -256,7 +259,8 @@ class Worker:
                     # fp.write(f"Time {time.time()} Before: ")
                     # self.shared_opt.print_states(fp.write)
                     self.shared_opt.zero_grad(set_to_none=True)
-                    self.agent.sync_grads(self.shared_agent)
+                    # self.agent.sync_grads(self.shared_agent)
+                    self.agent.sync_grads(self.shared_agent.net)
                     self.shared_opt.step()
                     # fp.write(f"Time {time.time()} After: ")
                     # self.shared_opt.print_states(fp.write)
@@ -373,6 +377,7 @@ def train_loop_continuous(agent_params, train_params, env_params,
     if load_file:
         print(f"Loading agent from {load_file}!")
         global_agent.load(load_file)
+
     global_agent.zero_grad()
     if shared_mode:
         global_agent.share_memory()
@@ -413,7 +418,8 @@ def train_loop_continuous(agent_params, train_params, env_params,
                 render=worker_params.get('render')
             )
             if save_gif:
-                fps = 140.0 / env_params.get('n_repeat', 4)
+                gif_frame_rate = worker_params.get('gif_frame_rate', 1.0)
+                fps = 140.0 / env_params.get('n_repeat', 4) / gif_frame_rate
                 utils.write_gif(worker.frames, save_gif, fps=fps)
 
         else:

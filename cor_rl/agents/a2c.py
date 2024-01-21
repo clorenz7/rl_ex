@@ -159,6 +159,10 @@ class AdvantageActorCriticAgent(BaseAgent):
             norm_data = joblib.load(file_name + ".norm")
             self.obs_mean, self.obs_std, self.obs_count = norm_data
 
+        self.optimizer = optimizer_factory.get(
+            self.optimizer_name, self.train_params, self.net
+        )
+
 
     def calculate_loss(self, results):
         n_step_returns = calc_n_step_returns(
@@ -224,8 +228,8 @@ class AdvantageActorCriticAgent(BaseAgent):
         for self_p, other_p in zip(self.net.parameters(), other_net.parameters()):
             if other_p.grad is not None:
                 print("Other grad is not none! Aborting Grad Sync!")
-                # return
-                continue
+                return
+                # continue
             other_p._grad = self_p.grad
 
     def calc_loss_and_backprop(self, results: InteractionResult):

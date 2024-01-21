@@ -1,0 +1,39 @@
+{
+    "agent_params": {
+        "n_actions": 14,
+        "gamma": 0.99,
+        "entropy_weight": 0.01,
+        "clip_grad_norm": 40.0,
+        "type": "a2c-lstmk",
+        "reward_clip": 1.0,
+        "n_channels": 1
+    },
+    "train_params": {
+        "optimizer": "adam",
+        "lr": 0.0
+    },
+    "env_params": {
+        "repeat_action_probability": 0.0,
+        "n_recurrent_states": 256,
+        "n_stack": 1,
+        "n_repeat": 1,
+        "env_name": "ALE/KungFuMaster-v5"
+    },
+    "simulation_params": {
+        // This achieves a score of 980
+        "seed": 101,
+        "load_file": "/Users/cory/rl_results/a3c_kungfu/A3C_KungFu_lstmk_jan20_epoch6.pt",
+        "save_gif": "/Users/cory/rl_results/a3c_kungfu/A3C_KungFu_lstmk_jan20_epoch6.gif",
+        "n_workers": 1,
+        "print_interval": 1,
+        "max_episodes": 1,
+        "max_steps_per_batch": 800,
+        "max_steps": 24000,
+        "metric_decay": 0.0,
+        "use_mlflow": false,
+        "serial": true,
+        "use_lock": false,
+        "render": false,
+        "gif_frame_rate": 4,
+    }
+}
